@@ -1,0 +1,10 @@
+# Generated indexes and AI cache — not committed
+.meta/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json

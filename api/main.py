@@ -38,18 +38,12 @@ app.include_router(
     tags=["users"],
 )
 
+# ── Docs routes ───────────────────────────────────────────────────────────────
+from docs_.router import router as docs_router
+
+app.include_router(docs_router)
+
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-
-# ── Placeholder routes (replaced by routers in later tasks) ──────────────────
-from fastapi import Depends
-from auth.users import require_editor
-
-
-@app.post("/docs", status_code=201, dependencies=[Depends(require_editor)])
-async def _docs_stub():
-    """Stub replaced by docs router in Task 7."""
-    return {}

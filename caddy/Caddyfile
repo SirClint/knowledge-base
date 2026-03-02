@@ -5,11 +5,13 @@
 :8443 {
     tls internal
 
-    handle /api/* {
-        uri strip_prefix /api
+    handle /kms/api/* {
+        uri strip_prefix /kms/api
         reverse_proxy api:8000
     }
-    handle {
+
+    handle /kms* {
+        uri strip_prefix /kms
         reverse_proxy ui:80
     }
 }

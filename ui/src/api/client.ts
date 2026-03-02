@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL ?? "/api";
+const BASE = import.meta.env.VITE_API_URL ?? "/kms/api";
 
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem("token");

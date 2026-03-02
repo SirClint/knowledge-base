@@ -1,8 +1,11 @@
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.database import get_session
 from docs_.service import create_doc, get_doc, update_doc, delete_doc
 from auth.users import require_editor, require_admin, current_active_user
+from config import settings
+import frontmatter
 
 router = APIRouter(prefix="/docs", tags=["docs"])
 
@@ -33,7 +36,14 @@ async def read(path: str, session=Depends(get_session), user=Depends(current_act
     doc = await get_doc(path, session)
     if not doc:
         raise HTTPException(404)
-    return doc
+    # Load full body from vault file
+    full_path = Path(settings.vault_path) / path
+    body = ""
+    if full_path.exists():
+        post = frontmatter.load(str(full_path))
+        body = post.content
+    return {"id": doc.id, "title": doc.title, "path": doc.path, "body": body,
+            "tags": doc.tags, "owner": doc.owner, "status": doc.status}
 
 
 @router.put("/{path:path}", dependencies=[Depends(require_editor)])

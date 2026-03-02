@@ -1,10 +1,4 @@
 :8080 {
-    redir https://{host}:8443{uri} permanent
-}
-
-:8443 {
-    tls internal
-
     handle /kms/api/* {
         uri strip_prefix /kms/api
         reverse_proxy api:8000

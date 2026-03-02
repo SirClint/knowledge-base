@@ -24,6 +24,8 @@ async def index_file(path: Path, session: AsyncSession) -> Document:
     doc.review_interval = parsed.review_interval
     doc.body_preview = parsed.body[:500]
     await session.commit()
+    from search.service import index_doc_vectors
+    await index_doc_vectors(str(doc.id), str(path), parsed.body)
     return doc
 
 

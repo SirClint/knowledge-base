@@ -1,4 +1,10 @@
-:80 {
+:8080 {
+    redir https://{host}:8443{uri} permanent
+}
+
+:8443 {
+    tls internal
+
     handle /api/* {
         uri strip_prefix /api
         reverse_proxy api:8000

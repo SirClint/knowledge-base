@@ -93,10 +93,11 @@ status: current
 The following components were identified but not yet fully designed at session end:
 
 1. **Indexer / Watcher** — background service watching for file changes, indexing into SQLite + vector store
-2. **Web UI** — self-hosted, team-accessible, graph view, search, review queue dashboard
+2. **Web UI** — self-hosted, team-accessible; primary interface for all users (replaces Confluence). Features: in-browser markdown editor (create + edit), search (keyword + semantic), document view (rendered markdown), review queue dashboard, graph view. Editor: CodeMirror or Monaco. User accounts required with three roles: Reader (view/search), Editor (read + create/edit), Admin (editor + delete + manage users).
 3. **AI Service** — local AI (Ollama) for staleness detection, auto-tagging, Q&A (RAG), reorganization suggestions
 4. **Review Queue** — dashboard surfacing stale docs, missing metadata, broken links, AI-flagged content
-5. **Docker Compose packaging** — for local or server deployment
+5. **Ingestion Service** — email/chat listener; AI determines create vs. update, acts immediately, replies with summary ("Updated doc: X. Done.") — no confirmation required, git is the undo. Platform TBD (design platform-agnostic).
+6. **Docker Compose packaging** — for local or server deployment
 
 ### Planned Tech Stack (preliminary)
 - **Backend:** Python (FastAPI)
@@ -109,14 +110,9 @@ The following components were identified but not yet fully designed at session e
 
 ## Where We Left Off
 
-Presented Section 1 of the design (overall architecture). User approved.
+All 5 sections presented and approved. Implementation plan written.
 
-**Next step:** Continue presenting design sections:
-- Section 2: Component details (indexer, web UI, AI service, review queue)
-- Section 3: Data flow
-- Section 4: AI feature specifics (how staleness detection works, RAG setup)
-- Section 5: Tech stack finalization
-- Then: write formal design doc and invoke writing-plans skill for implementation plan
+**Implementation plan:** `docs/plans/2026-03-01-knowledge-management-system.md`
 
 ---
 

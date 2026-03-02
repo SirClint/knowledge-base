@@ -21,11 +21,21 @@ export const api = {
       body: new URLSearchParams({ username: email, password }),
     }).then(r => r.json()),
 
+  register: (email: string, password: string, role: string) =>
+    fetch(`${BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, role }),
+    }).then(r => {
+      if (!r.ok) return r.json().then(d => { throw d; });
+      return r.json();
+    }),
+
   getDoc: (path: string) => request(`/docs/${path}`),
   createDoc: (data: object) => request("/docs", { method: "POST", body: JSON.stringify(data) }),
   updateDoc: (path: string, data: object) => request(`/docs/${path}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteDoc: (path: string) => request(`/docs/${path}`, { method: "DELETE" }),
-  search: (q: string, mode = "both") => request(`/search?q=${encodeURIComponent(q)}&mode=${mode}`),
+  search: (q: string, mode = "keyword") => request(`/search?q=${encodeURIComponent(q)}&mode=${mode}`),
   reviewQueue: () => request("/review/queue"),
   markReviewed: (id: number) => request(`/review/${id}/mark-reviewed`, { method: "POST" }),
 };

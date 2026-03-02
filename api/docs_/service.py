@@ -20,6 +20,12 @@ async def create_doc(path: str, title: str, body: str, tags: list, owner: str, s
     doc = Document(path=path, title=title, tags=json.dumps(tags), owner=owner, body_preview=body[:500])
     session.add(doc)
     await session.commit()
+    # Index into vector store for semantic search
+    from search.service import index_doc_vectors
+    try:
+        await index_doc_vectors(str(doc.id), path, f"{title}\n{body}")
+    except Exception:
+        pass  # Don't fail doc creation if Ollama is unavailable
     return doc
 
 

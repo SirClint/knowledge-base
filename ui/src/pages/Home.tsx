@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client";
 import SearchBar from "../components/SearchBar";
 
@@ -29,7 +29,7 @@ export default function Home() {
       <ul style={{ listStyle: "none", padding: 0 }}>
         {results.map(r => (
           <li key={r.id} style={{ borderBottom: "1px solid #eee", padding: "8px 0" }}>
-            <a href={`/doc/${r.path}`} style={{ textDecoration: "none" }}>{r.title || r.path}</a>
+            <Link to={`/doc/${r.path}`} style={{ textDecoration: "none" }}>{r.title || r.path}</Link>
             <span style={{ color: "#888", fontSize: 12, marginLeft: 8 }}>{r.path}</span>
           </li>
         ))}

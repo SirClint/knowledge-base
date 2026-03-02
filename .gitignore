@@ -1,6 +1,27 @@
 # Generated indexes and AI cache — not committed
 .meta/
 
+# Git worktrees
+.worktrees/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# Runtime data
+*.db
+*.log
+
+# Env (local overrides)
+.env
+
 # OS
 .DS_Store
 Thumbs.db

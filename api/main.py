@@ -3,6 +3,9 @@ from contextlib import asynccontextmanager
 from db.database import create_db
 from config import settings
 from pathlib import Path
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
@@ -13,7 +16,12 @@ async def lifespan(app: FastAPI):
     from watcher.watcher import index_vault
     async with async_session_maker() as session:
         await index_vault(Path(settings.vault_path), session)
+    # Start nightly staleness scheduler
+    from scheduler.jobs import run_staleness_check
+    scheduler.add_job(run_staleness_check, "cron", hour=2)
+    scheduler.start()
     yield
+    scheduler.shutdown()
 
 
 app = FastAPI(title="Knowledge Base API", lifespan=lifespan)
@@ -47,6 +55,11 @@ app.include_router(docs_router)
 from search.router import router as search_router
 
 app.include_router(search_router)
+
+# ── Review routes ─────────────────────────────────────────────────────────────
+from review.router import router as review_router
+
+app.include_router(review_router)
 
 
 @app.get("/health")

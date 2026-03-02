@@ -61,6 +61,11 @@ from review.router import router as review_router
 
 app.include_router(review_router)
 
+# ── Ingestion routes ──────────────────────────────────────────────────────────
+from ingestion.router import router as ingest_router
+
+app.include_router(ingest_router)
+
 
 @app.get("/health")
 async def health():

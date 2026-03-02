@@ -1,6 +1,9 @@
 # Generated indexes and AI cache — not committed
 .meta/
 
+# Git worktrees
+.worktrees/
+
 # OS
 .DS_Store
 Thumbs.db

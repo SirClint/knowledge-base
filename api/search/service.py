@@ -13,7 +13,7 @@ async def embed_doc(text: str) -> list[float]:
         response = await client.post(
             f"{settings.ollama_url}/api/embeddings",
             json={"model": "nomic-embed-text", "prompt": text},
-            timeout=30,
+            timeout=5,
         )
         return response.json()["embedding"]
 

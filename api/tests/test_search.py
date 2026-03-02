@@ -1,6 +1,20 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from search.service import embed_doc, search_semantic
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from db.models import Base, Document
+
+
+@pytest.fixture
+async def session():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with maker() as s:
+        yield s
+    await engine.dispose()
 
 
 async def test_embed_doc_calls_ollama():
@@ -28,3 +42,12 @@ async def test_search_semantic_returns_results():
             results = await search_semantic("how do I deploy?", n_results=2)
             assert len(results) == 2
             assert results[0]["path"] == "team/processes/deploy.md"
+
+
+async def test_keyword_search(session):
+    from search.service import search_keyword
+    doc = Document(path="team/processes/deploy.md", title="Kubernetes Deploy", tags='["kubernetes"]', body_preview="steps to deploy")
+    session.add(doc)
+    await session.commit()
+    results = await search_keyword("kubernetes", session)
+    assert any("Kubernetes" in r["title"] for r in results)

@@ -43,6 +43,11 @@ from docs_.router import router as docs_router
 
 app.include_router(docs_router)
 
+# ── Search routes ─────────────────────────────────────────────────────────────
+from search.router import router as search_router
+
+app.include_router(search_router)
+
 
 @app.get("/health")
 async def health():

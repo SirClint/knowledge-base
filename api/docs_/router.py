@@ -2,6 +2,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.database import get_session
+from db.models import Document
 from docs_.service import create_doc, get_doc, update_doc, delete_doc
 from auth.users import require_editor, require_admin, current_active_user
 from config import settings
@@ -29,6 +30,14 @@ class DocUpdate(BaseModel):
 async def create(payload: DocCreate, session=Depends(get_session)):
     doc = await create_doc(payload.path, payload.title, payload.body, payload.tags, payload.owner, session)
     return {"id": doc.id, "title": doc.title, "path": doc.path}
+
+
+@router.get("", dependencies=[Depends(current_active_user)])
+async def list_all(session=Depends(get_session)):
+    from sqlalchemy import select
+    result = await session.execute(select(Document))
+    docs = result.scalars().all()
+    return [{"id": d.id, "path": d.path, "title": d.title} for d in docs]
 
 
 @router.get("/{path:path}")

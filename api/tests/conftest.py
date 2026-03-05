@@ -4,10 +4,10 @@ import pytest
 
 # Set test environment BEFORE any app modules are imported
 _tmpdir = tempfile.mkdtemp()
-os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_tmpdir}/test.db")
-os.environ.setdefault("VAULT_PATH", _tmpdir)
+os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmpdir}/test.db"
+os.environ["VAULT_PATH"] = _tmpdir
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
-os.environ.setdefault("CHROMADB_PATH", f"{_tmpdir}/chroma")
+os.environ["CHROMADB_PATH"] = f"{_tmpdir}/chroma"
 
 
 @pytest.fixture(autouse=True)

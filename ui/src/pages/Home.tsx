@@ -33,7 +33,9 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.listDocs().then((docs: DocResult[]) => setAllDocs(docs));
+    api.listDocs()
+      .then((docs: DocResult[]) => setAllDocs(docs))
+      .catch(() => { localStorage.removeItem("token"); navigate("/login"); });
   }, []);
 
   const folderTree = buildFolderTree(allDocs);

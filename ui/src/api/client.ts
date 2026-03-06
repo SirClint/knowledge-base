@@ -35,6 +35,7 @@ export const api = {
   createDoc: (data: object) => request("/docs", { method: "POST", body: JSON.stringify(data) }),
   updateDoc: (path: string, data: object) => request(`/docs/${path}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteDoc: (path: string) => request(`/docs/${path}`, { method: "DELETE" }),
+  listDocs: () => request("/docs"),
   search: (q: string, mode = "keyword") => request(`/search?q=${encodeURIComponent(q)}&mode=${mode}`),
   reviewQueue: () => request("/review/queue"),
   markReviewed: (id: number) => request(`/review/${id}/mark-reviewed`, { method: "POST" }),

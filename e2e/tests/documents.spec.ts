@@ -71,6 +71,42 @@ test.describe("Documents", () => {
     await expect(page.locator(`text=${body}`)).toBeVisible();
   });
 
+  test("click folder to browse documents", async ({ page }) => {
+    // Create a doc in team/processes
+    const title = `Process Doc ${Date.now()}`;
+    const path = `team/processes/${title.toLowerCase().replace(/\s+/g, "-")}.md`;
+    await page.request.post("http://localhost:8080/kms/api/docs", {
+      headers: { Authorization: `Bearer ${await getToken(page)}` },
+      data: { title, path, body: "Process content", tags: [] },
+    });
+
+    // Create a doc in personal (to confirm it's NOT shown)
+    const otherTitle = `Personal Note ${Date.now()}`;
+    await page.request.post("http://localhost:8080/kms/api/docs", {
+      headers: { Authorization: `Bearer ${await getToken(page)}` },
+      data: {
+        title: otherTitle,
+        path: `personal/${otherTitle.toLowerCase().replace(/\s+/g, "-")}.md`,
+        body: "Personal content",
+        tags: [],
+      },
+    });
+
+    await page.goto("./");
+
+    // Expand team folder by clicking the expand arrow
+    await page.locator("text=▶").first().click({ timeout: 5000 });
+
+    // Click processes subfolder
+    await page.click("text=processes");
+
+    // The team/processes doc should appear
+    await expect(page.locator(`text=${title}`)).toBeVisible();
+
+    // The personal doc should NOT appear
+    await expect(page.locator(`text=${otherTitle}`)).not.toBeVisible();
+  });
+
   test("edit an existing document", async ({ page }) => {
     // Create a doc
     const title = `Editable ${Date.now()}`;

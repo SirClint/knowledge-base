@@ -2,10 +2,15 @@ import { useState } from "react";
 
 interface Props {
   onSearch: (query: string) => void;
+  value?: string;
+  onChange?: (query: string) => void;
 }
 
-export default function SearchBar({ onSearch }: Props) {
-  const [query, setQuery] = useState("");
+export default function SearchBar({ onSearch, value, onChange }: Props) {
+  const [localQuery, setLocalQuery] = useState("");
+  const controlled = value !== undefined && onChange !== undefined;
+  const query = controlled ? value : localQuery;
+  const setQuery = controlled ? onChange! : setLocalQuery;
   return (
     <form
       onSubmit={e => { e.preventDefault(); onSearch(query); }}

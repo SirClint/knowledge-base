@@ -57,7 +57,7 @@ export default function DocPage() {
         {!isNew && !editing && <button onClick={() => setEditing(true)}>Edit</button>}
         {!isNew && editing && <button onClick={save}>Save</button>}
         {!isNew && editing && <button onClick={() => setEditing(false)}>Cancel</button>}
-        {error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}
+        {!isNew && error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}
       </div>
 
       {isNew ? (

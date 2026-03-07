@@ -54,4 +54,7 @@ async def classify_ingestion_intent(message: str, candidate_paths: list[str]) ->
         "Return ONLY valid JSON."
     )
     raw = await _ollama(prompt, system)
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"AI returned invalid JSON: {e}") from e

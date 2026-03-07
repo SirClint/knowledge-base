@@ -6,25 +6,16 @@ import Editor from "../components/Editor";
 
 interface Doc { title: string; body: string; path: string; }
 
-const CATEGORIES = [
-  { value: "team/processes", label: "Processes" },
-  { value: "team/architecture", label: "Architecture" },
-  { value: "team/projects", label: "Projects" },
-  { value: "personal", label: "Personal" },
-];
-
-function titleToFilename(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + ".md";
-}
-
 export default function DocPage() {
   const { "*": path } = useParams();
   const navigate = useNavigate();
   const isNew = path === "new";
   const [doc, setDoc] = useState<Doc>({ title: "", body: "", path: "" });
-  const [category, setCategory] = useState(CATEGORIES[0].value);
-  const [editing, setEditing] = useState(isNew);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
+  // AI ingestion state (only used when isNew)
+  const [ingestText, setIngestText] = useState("");
+  const [ingesting, setIngesting] = useState(false);
 
   useEffect(() => {
     if (!isNew && path) {
@@ -35,14 +26,8 @@ export default function DocPage() {
   async function save() {
     setError("");
     try {
-      if (isNew) {
-        const fullPath = `${category}/${titleToFilename(doc.title)}`;
-        await api.createDoc({ title: doc.title, path: fullPath, body: doc.body, tags: [] });
-        navigate(`/doc/${fullPath}`);
-      } else {
-        await api.updateDoc(path!, { title: doc.title, body: doc.body });
-        setEditing(false);
-      }
+      await api.updateDoc(path!, { title: doc.title, body: doc.body });
+      setEditing(false);
     } catch (e: any) {
       if (e.message?.includes("403")) {
         setError("Permission denied. Your account needs the editor or admin role to save documents.");
@@ -52,16 +37,56 @@ export default function DocPage() {
     }
   }
 
+  async function ingest() {
+    if (!ingestText.trim()) return;
+    setIngesting(true);
+    setError("");
+    try {
+      const result = await api.ingest(ingestText);
+      navigate(`/doc/${result.path}`);
+    } catch (e: any) {
+      setError(e.message ?? "Processing failed");
+      setIngesting(false);
+    }
+  }
+
   return (
     <div style={{ maxWidth: 900, margin: "40px auto", padding: 24 }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => navigate("/")}>← Back</button>
-        {!editing && <button onClick={() => setEditing(true)}>Edit</button>}
-        {editing && <button onClick={save}>Save</button>}
-        {editing && !isNew && <button onClick={() => setEditing(false)}>Cancel</button>}
+        {!isNew && !editing && <button onClick={() => setEditing(true)}>Edit</button>}
+        {!isNew && editing && <button onClick={save}>Save</button>}
+        {!isNew && editing && <button onClick={() => setEditing(false)}>Cancel</button>}
         {error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}
       </div>
-      {editing ? (
+
+      {isNew ? (
+        <div>
+          <h2 style={{ marginTop: 0 }}>New Document</h2>
+          <p style={{ color: "#888", fontSize: 13, marginBottom: 12 }}>
+            Paste or describe your content. AI will determine the title, folder, and whether to create or update an existing document.
+          </p>
+          <textarea
+            value={ingestText}
+            onChange={e => setIngestText(e.target.value)}
+            placeholder="Paste notes, content, or describe what you want to document..."
+            disabled={ingesting}
+            style={{
+              display: "block", width: "100%", height: 300,
+              padding: 8, fontSize: 14, boxSizing: "border-box",
+              fontFamily: "monospace", resize: "vertical",
+            }}
+          />
+          {error && <div style={{ color: "red", marginTop: 8 }}>{error}</div>}
+          <button
+            onClick={ingest}
+            disabled={ingesting || !ingestText.trim()}
+            style={{ marginTop: 8 }}
+          >
+            {ingesting ? "Processing with AI..." : "Process with AI"}
+          </button>
+        </div>
+      ) : editing ? (
         <>
           <input
             value={doc.title}
@@ -69,17 +94,6 @@ export default function DocPage() {
             placeholder="Title"
             style={{ display: "block", width: "100%", fontSize: 24, marginBottom: 8, padding: 8, boxSizing: "border-box" }}
           />
-          {isNew && (
-            <select
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-              style={{ display: "block", width: "100%", marginBottom: 8, padding: 8, boxSizing: "border-box" }}
-            >
-              {CATEGORIES.map(c => (
-                <option key={c.value} value={c.value}>{c.label} ({c.value}/)</option>
-              ))}
-            </select>
-          )}
           <Editor value={doc.body} onChange={body => setDoc(d => ({ ...d, body }))} />
         </>
       ) : (

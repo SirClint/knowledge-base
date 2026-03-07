@@ -96,3 +96,6 @@ cd e2e && npx playwright test             # E2E tests
 - [ ] CI/CD pipeline (run E2E tests on PR)
 - [ ] Rate limiting on auth endpoints
 - [ ] Proper logging throughout API
+- [ ] Role gate on `POST /ingest` — currently any authenticated user (including `reader`) can create/update docs via ingestion; should require `editor`/`admin`
+- [ ] Path traversal guard in `docs_/service.py` — vault path is not validated to stay within `VAULT_PATH` before file writes (affects all create/update paths, including ingestion)
+- [ ] Add `json.JSONDecodeError` handling to `suggest_tags` and `check_staleness` in `ai/service.py` (background jobs; lower severity than ingestion)

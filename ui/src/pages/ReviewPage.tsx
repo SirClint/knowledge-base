@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import ReviewQueue from "../components/ReviewQueue";
 
-interface Doc { id: number; path: string; title: string; last_reviewed: string; }
+interface Doc { id: number; path: string; title: string; last_reviewed: string; reason?: string; }
 
 export default function ReviewPage() {
   const [docs, setDocs] = useState<Doc[]>([]);

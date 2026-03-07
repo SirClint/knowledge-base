@@ -15,13 +15,20 @@ async def ingest_message(message: str, session: AsyncSession) -> dict:
     path = intent.get("path", "")
     title = intent.get("title", "Untitled")
     body = intent.get("body", message)
+    needs_review = intent.get("needs_review", False)
 
     if action == "update" and path:
-        await update_doc(path, {"title": title, "body": body}, session)
-        return {"action": "update", "path": path, "message": f"Updated doc: {title}. Done."}
+        doc = await update_doc(path, {"title": title, "body": body}, session)
+        if needs_review and doc:
+            doc.status = "needs_review"
+            await session.commit()
+        return {"action": "update", "path": path, "needs_review": needs_review, "message": f"Updated doc: {title}."}
     else:
         if not path:
             slug = title.lower().replace(" ", "-")[:40]
-            path = f"team/processes/{slug}.md"
-        await create_doc(path, title, body, [], "", session)
-        return {"action": "create", "path": path, "message": f"Created doc: {title}. Done."}
+            path = f"personal/{slug}.md"
+        doc = await create_doc(path, title, body, [], "", session)
+        if needs_review and doc:
+            doc.status = "needs_review"
+            await session.commit()
+        return {"action": "create", "path": path, "needs_review": needs_review, "message": f"Created doc: {title}."}

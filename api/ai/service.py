@@ -35,12 +35,26 @@ async def check_staleness(body: str) -> dict:
     return json.loads(raw)
 
 
+KNOWN_FOLDERS = ["personal", "team/processes", "team/architecture", "team/projects"]
+
+
 async def classify_ingestion_intent(message: str, candidate_paths: list[str]) -> dict:
-    prompt = f"Message: {message}\n\nExisting doc paths:\n" + "\n".join(candidate_paths[:20])
+    paths_block = "\n".join(candidate_paths[:20])
+    prompt = (
+        f"Message: {message}\n\n"
+        f"Existing doc paths:\n{paths_block}\n\n"
+        f"Available folders: {', '.join(KNOWN_FOLDERS)}"
+    )
     system = (
         "Return JSON: {\"action\": \"create\"|\"update\", \"path\": string|null, "
-        "\"title\": string, \"body\": string}. If updating, pick the most relevant path. "
-        "If unsure, use 'create'."
+        "\"title\": string, \"body\": string, \"needs_review\": boolean}. "
+        "If updating, pick the most relevant existing path. "
+        "If creating, choose the most appropriate folder from the available folders list and construct a slug filename. "
+        "Set needs_review to true if you are unsure about the action or folder placement. "
+        "Return ONLY valid JSON."
     )
     raw = await _ollama(prompt, system)
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"AI returned invalid JSON: {e}") from e

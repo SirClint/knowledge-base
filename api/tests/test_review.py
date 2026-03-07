@@ -35,3 +35,28 @@ async def test_overdue_docs_returned(session):
     paths = [r.path for r in results]
     assert "team/processes/old.md" in paths
     assert "team/processes/new.md" not in paths
+
+
+async def test_needs_review_docs_included_in_queue(session):
+    flagged = Document(
+        path="personal/ai-note.md", title="AI Note",
+        last_reviewed=None, status="needs_review"
+    )
+    session.add(flagged)
+    await session.commit()
+    results = await get_overdue_docs(session)
+    paths = [r.path for r in results]
+    assert "personal/ai-note.md" in paths
+
+
+async def test_overdue_docs_not_affected_by_change(session):
+    overdue = Document(
+        path="team/processes/old2.md", title="Old Doc 2",
+        last_reviewed=str(date.today() - timedelta(days=60)),
+        review_interval="30d", status="current"
+    )
+    session.add(overdue)
+    await session.commit()
+    results = await get_overdue_docs(session)
+    paths = [r.path for r in results]
+    assert "team/processes/old2.md" in paths

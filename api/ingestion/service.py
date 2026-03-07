@@ -28,7 +28,7 @@ async def ingest_message(message: str, session: AsyncSession) -> dict:
             slug = title.lower().replace(" ", "-")[:40]
             path = f"personal/{slug}.md"
         doc = await create_doc(path, title, body, [], "", session)
-        if needs_review:
+        if needs_review and doc:
             doc.status = "needs_review"
             await session.commit()
         return {"action": "create", "path": path, "needs_review": needs_review, "message": f"Created doc: {title}."}

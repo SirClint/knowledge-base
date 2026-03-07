@@ -39,9 +39,10 @@ KNOWN_FOLDERS = ["personal", "team/processes", "team/architecture", "team/projec
 
 
 async def classify_ingestion_intent(message: str, candidate_paths: list[str]) -> dict:
+    paths_block = "\n".join(candidate_paths[:20])
     prompt = (
         f"Message: {message}\n\n"
-        f"Existing doc paths:\n" + "\n".join(candidate_paths[:20]) + "\n\n"
+        f"Existing doc paths:\n{paths_block}\n\n"
         f"Available folders: {', '.join(KNOWN_FOLDERS)}"
     )
     system = (

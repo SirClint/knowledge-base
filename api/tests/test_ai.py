@@ -46,5 +46,9 @@ async def test_classify_ingestion_includes_known_folders_in_prompt():
     with patch("ai.service.httpx.AsyncClient") as mock:
         mock.return_value.__aenter__.return_value.post = fake_post
         from ai.service import classify_ingestion_intent
-        await classify_ingestion_intent("architecture doc", candidate_paths=[])
-        assert "team/architecture" in captured["payload"]["prompt"] or "team/architecture" in captured["payload"]["system"]
+        await classify_ingestion_intent("architecture doc", candidate_paths=["personal/existing.md"])
+        prompt = captured["payload"]["prompt"]
+        assert "Existing doc paths:" in prompt
+        assert "Available folders:" in prompt
+        assert prompt.index("Existing doc paths:") < prompt.index("Available folders:")
+        assert "team/architecture" in prompt

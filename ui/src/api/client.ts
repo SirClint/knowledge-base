@@ -47,6 +47,7 @@ export const api = {
   updateDoc: (path: string, data: object) => request(`/docs/${path}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteDoc: (path: string) => request(`/docs/${path}`, { method: "DELETE" }),
   listDocs: () => request("/docs"),
+  getFolders: () => request("/docs/folders"),
   ingest: (message: string) => request("/ingest", { method: "POST", body: JSON.stringify({ message }) }),
   search: (q: string, mode = "keyword") => request(`/search?q=${encodeURIComponent(q)}&mode=${mode}`),
   reviewQueue: () => request("/review/queue"),

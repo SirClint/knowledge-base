@@ -4,9 +4,12 @@ import Register from "./pages/Register";
 import Home from "./pages/Home";
 import DocPage from "./pages/DocPage";
 import ReviewPage from "./pages/ReviewPage";
+import Layout from "./components/Layout";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  return localStorage.getItem("token") ? <>{children}</> : <Navigate to="/login" />;
+  return localStorage.getItem("token")
+    ? <Layout>{children}</Layout>
+    : <Navigate to="/login" />;
 }
 
 export default function App() {

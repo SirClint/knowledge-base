@@ -15,11 +15,22 @@ async function request(path: string, options: RequestInit = {}) {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
-    fetch(`${BASE}/auth/jwt/login`, {
+  login: async (email: string, password: string) => {
+    const r = await fetch(`${BASE}/auth/jwt/login`, {
       method: "POST",
       body: new URLSearchParams({ username: email, password }),
-    }).then(r => r.json()),
+    });
+    const data = await r.json();
+    if (data.access_token) {
+      localStorage.setItem("token", data.access_token);
+      // Fetch role and store it
+      const me = await fetch(`${BASE}/users/me`, {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      }).then(r => r.json());
+      localStorage.setItem("role", me.role ?? "reader");
+    }
+    return data;
+  },
 
   register: (email: string, password: string, role: string) =>
     fetch(`${BASE}/auth/register`, {
@@ -40,4 +51,5 @@ export const api = {
   search: (q: string, mode = "keyword") => request(`/search?q=${encodeURIComponent(q)}&mode=${mode}`),
   reviewQueue: () => request("/review/queue"),
   markReviewed: (id: number) => request(`/review/${id}/mark-reviewed`, { method: "POST" }),
+  getMe: () => request("/users/me"),
 };

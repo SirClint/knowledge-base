@@ -13,7 +13,6 @@ export default function Login() {
     try {
       const data = await api.login(email, password);
       if (data.access_token) {
-        localStorage.setItem("token", data.access_token);
         navigate("/");
       } else {
         setError("Invalid credentials");

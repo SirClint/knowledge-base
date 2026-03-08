@@ -67,7 +67,6 @@ export default function Home() {
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => navigate("/doc/new")}>+ New Doc</button>
           <button onClick={() => navigate("/review")}>Review Queue</button>
-          <button onClick={() => { localStorage.removeItem("token"); navigate("/login"); }}>Log out</button>
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import Register from "./pages/Register";
 import Home from "./pages/Home";
 import DocPage from "./pages/DocPage";
 import ReviewPage from "./pages/ReviewPage";
+import UsersPage from "./pages/UsersPage";
 import Layout from "./components/Layout";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
         <Route path="/doc/*" element={<PrivateRoute><DocPage /></PrivateRoute>} />
         <Route path="/review" element={<PrivateRoute><ReviewPage /></PrivateRoute>} />
+        <Route path="/users" element={<PrivateRoute><UsersPage /></PrivateRoute>} />
       </Routes>
     </BrowserRouter>
   );

@@ -11,6 +11,7 @@ async function request(path: string, options: RequestInit = {}) {
     },
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (res.status === 204) return null;
   return res.json();
 }
 
@@ -53,4 +54,8 @@ export const api = {
   reviewQueue: () => request("/review/queue"),
   markReviewed: (id: number) => request(`/review/${id}/mark-reviewed`, { method: "POST" }),
   getMe: () => request("/users/me"),
+  listUsers: () => request("/admin/users"),
+  changeRole: (id: string, role: string) => request(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+  resetPassword: (id: string, password: string) => request(`/admin/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) }),
+  deleteUser: (id: string) => request(`/admin/users/${id}`, { method: "DELETE" }),
 };

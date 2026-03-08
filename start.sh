@@ -21,7 +21,7 @@ OLLAMA_PID_FILE="/tmp/ollama-kms.pid"
 # Start Ollama if not already running
 if ! pgrep -x "ollama" > /dev/null 2>&1; then
   echo "Starting Ollama..."
-  ollama serve &>/tmp/ollama-kms.log &
+  OLLAMA_HOST=0.0.0.0 ollama serve &>/tmp/ollama-kms.log &
   echo $! > "$OLLAMA_PID_FILE"
   # Wait up to 10 seconds for Ollama to be ready
   OLLAMA_READY=0

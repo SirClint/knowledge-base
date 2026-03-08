@@ -66,6 +66,11 @@ from ingestion.router import router as ingest_router
 
 app.include_router(ingest_router)
 
+# ── Admin routes ──────────────────────────────────────────────────────────────
+from admin.router import router as admin_router
+
+app.include_router(admin_router)
+
 
 @app.get("/health")
 async def health():

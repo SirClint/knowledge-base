@@ -29,3 +29,7 @@ Thumbs.db
 # Editor
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+
+vault-test/*
+!vault-test/.gitkeep
+backups/*.tar.gz

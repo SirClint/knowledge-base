@@ -37,7 +37,7 @@ async def test_index_file_creates_record(session):
         path = Path(f.name)
     try:
         with patch("search.service.index_doc_vectors", new=AsyncMock()):
-            await index_file(path, session)
+            await index_file(path, path.parent, session)
         from sqlalchemy import select
         result = await session.execute(select(Document).where(Document.title == "Test Doc"))
         doc = result.scalar_one_or_none()
@@ -53,10 +53,10 @@ async def test_index_file_updates_existing(session):
         path = Path(f.name)
     try:
         with patch("search.service.index_doc_vectors", new=AsyncMock()):
-            await index_file(path, session)
+            await index_file(path, path.parent, session)
             updated = SAMPLE.replace("title: Test Doc", "title: Updated Doc")
             path.write_text(updated)
-            await index_file(path, session)
+            await index_file(path, path.parent, session)
         from sqlalchemy import select, func
         result = await session.execute(select(func.count()).select_from(Document))
         count = result.scalar()

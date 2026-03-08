@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL ?? "/kms/api";
+export const BASE = import.meta.env.VITE_API_URL ?? "/kms/api";
 
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem("token");
@@ -11,15 +11,27 @@ async function request(path: string, options: RequestInit = {}) {
     },
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (res.status === 204) return null;
   return res.json();
 }
 
 export const api = {
-  login: (email: string, password: string) =>
-    fetch(`${BASE}/auth/jwt/login`, {
+  login: async (email: string, password: string) => {
+    const r = await fetch(`${BASE}/auth/jwt/login`, {
       method: "POST",
       body: new URLSearchParams({ username: email, password }),
-    }).then(r => r.json()),
+    });
+    const data = await r.json();
+    if (data.access_token) {
+      localStorage.setItem("token", data.access_token);
+      // Fetch role and store it
+      const me = await fetch(`${BASE}/users/me`, {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      }).then(r => r.json());
+      localStorage.setItem("role", me.role ?? "reader");
+    }
+    return data;
+  },
 
   register: (email: string, password: string, role: string) =>
     fetch(`${BASE}/auth/register`, {
@@ -36,8 +48,14 @@ export const api = {
   updateDoc: (path: string, data: object) => request(`/docs/${path}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteDoc: (path: string) => request(`/docs/${path}`, { method: "DELETE" }),
   listDocs: () => request("/docs"),
+  getFolders: () => request("/docs/folders"),
   ingest: (message: string) => request("/ingest", { method: "POST", body: JSON.stringify({ message }) }),
   search: (q: string, mode = "keyword") => request(`/search?q=${encodeURIComponent(q)}&mode=${mode}`),
   reviewQueue: () => request("/review/queue"),
   markReviewed: (id: number) => request(`/review/${id}/mark-reviewed`, { method: "POST" }),
+  getMe: () => request("/users/me"),
+  listUsers: () => request("/admin/users"),
+  changeRole: (id: string, role: string) => request(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+  resetPassword: (id: string, password: string) => request(`/admin/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) }),
+  deleteUser: (id: string) => request(`/admin/users/${id}`, { method: "DELETE" }),
 };

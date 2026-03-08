@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="Knowledge Base API", lifespan=lifespan)
+app = FastAPI(title="Knowledge Base API", lifespan=lifespan, docs_url="/api-docs", redoc_url="/api-redoc")
 
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
@@ -66,7 +66,25 @@ from ingestion.router import router as ingest_router
 
 app.include_router(ingest_router)
 
+# ── Admin routes ──────────────────────────────────────────────────────────────
+from admin.router import router as admin_router
+
+app.include_router(admin_router)
+
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/health/ai")
+async def health_ai():
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            r = await client.get(f"{settings.ollama_url}/api/tags")
+            if r.status_code == 200:
+                return {"ai": "online"}
+    except Exception:
+        pass
+    return {"ai": "offline"}

@@ -1,0 +1,31 @@
+services:
+  api:
+    build: ./api
+    volumes:
+      - ./vault-test:/vault
+      - kb_data_test:/data
+    env_file: .env.test
+    depends_on:
+      - chromadb
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ui:
+    build: ./ui
+
+  chromadb:
+    image: chromadb/chroma:latest
+    volumes:
+      - kb_data_test:/chroma/chroma
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./caddy/Caddyfile.test:/etc/caddy/Caddyfile
+      - caddy_data_test:/data
+
+volumes:
+  kb_data_test:
+  caddy_data_test:

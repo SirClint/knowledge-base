@@ -6,6 +6,7 @@ from db.models import Document
 from docs_.service import create_doc, get_doc, update_doc, delete_doc
 from auth.users import require_editor, require_admin, current_active_user
 from config import settings
+from ai.service import KNOWN_FOLDERS
 import frontmatter
 
 router = APIRouter(prefix="/docs", tags=["docs"])
@@ -38,6 +39,11 @@ async def list_all(session=Depends(get_session)):
     result = await session.execute(select(Document))
     docs = result.scalars().all()
     return [{"id": d.id, "path": d.path, "title": d.title} for d in docs]
+
+
+@router.get("/folders", dependencies=[Depends(current_active_user)])
+async def list_folders():
+    return KNOWN_FOLDERS
 
 
 @router.get("/{path:path}")

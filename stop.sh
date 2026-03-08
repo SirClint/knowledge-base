@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "Stopping KMS ($ENV)..."
-docker compose -f "$COMPOSE_FILE" down
+docker compose -f "$COMPOSE_FILE" down || true
 
 # Only kill Ollama if stopping prod (don't kill if test might still use it)
 if [[ "$ENV" == "prod" ]]; then

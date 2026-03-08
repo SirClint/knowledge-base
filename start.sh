@@ -24,13 +24,19 @@ if ! pgrep -x "ollama" > /dev/null 2>&1; then
   ollama serve &>/tmp/ollama-kms.log &
   echo $! > "$OLLAMA_PID_FILE"
   # Wait up to 10 seconds for Ollama to be ready
+  OLLAMA_READY=0
   for i in $(seq 1 10); do
     if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
       echo "Ollama is ready."
+      OLLAMA_READY=1
       break
     fi
     sleep 1
   done
+  if [[ "$OLLAMA_READY" -eq 0 ]]; then
+    echo "Warning: Ollama did not respond within 10 seconds. AI features may be unavailable."
+    echo "Check /tmp/ollama-kms.log for details."
+  fi
 else
   echo "Ollama is already running."
 fi

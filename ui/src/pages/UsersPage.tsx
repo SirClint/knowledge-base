@@ -11,6 +11,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Guard: non-admin should not reach this page
   useEffect(() => {
@@ -18,6 +19,7 @@ export default function UsersPage() {
       navigate("/");
       return;
     }
+    api.getMe().then((me: User) => setCurrentUserId(me.id)).catch(() => {});
     load();
   }, []);
 
@@ -25,8 +27,12 @@ export default function UsersPage() {
     try {
       const data = await api.listUsers();
       setUsers(data);
-    } catch {
-      setError("Failed to load users");
+    } catch (e: any) {
+      if (e.message?.includes("403")) {
+        setError("Access denied — your session may be outdated. Please log out and log back in.");
+      } else {
+        setError("Failed to load users");
+      }
     }
   }
 
@@ -44,6 +50,7 @@ export default function UsersPage() {
   async function resetPassword(id: string, email: string) {
     const pw = window.prompt(`Set new password for ${email} (min 8 chars):`);
     if (!pw) return;
+    if (pw.trim().length < 8) { setError("Password must be at least 8 characters."); return; }
     setError(""); setMessage("");
     try {
       await api.resetPassword(id, pw);
@@ -79,31 +86,36 @@ export default function UsersPage() {
           </tr>
         </thead>
         <tbody>
-          {users.map(u => (
-            <tr key={u.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: "8px 12px" }}>{u.email}</td>
-              <td style={{ padding: "8px 12px" }}>
-                <select
-                  value={u.role}
-                  onChange={e => changeRole(u.id, e.target.value)}
-                  style={{ fontSize: 13 }}
-                >
-                  {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </td>
-              <td style={{ padding: "8px 12px", display: "flex", gap: 8 }}>
-                <button onClick={() => resetPassword(u.id, u.email)} style={{ fontSize: 12 }}>
-                  Reset Password
-                </button>
-                <button
-                  onClick={() => deleteUser(u.id, u.email)}
-                  style={{ fontSize: 12, color: "white", background: "#dc2626", border: "none", padding: "3px 8px", cursor: "pointer" }}
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
+          {users.map(u => {
+            const isSelf = u.id === currentUserId;
+            return (
+              <tr key={u.id} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "8px 12px" }}>{u.email}{isSelf && <span style={{ color: "#888", fontSize: 11, marginLeft: 6 }}>(you)</span>}</td>
+                <td style={{ padding: "8px 12px" }}>
+                  <select
+                    value={u.role}
+                    onChange={e => changeRole(u.id, e.target.value)}
+                    disabled={isSelf}
+                    style={{ fontSize: 13, opacity: isSelf ? 0.5 : 1 }}
+                  >
+                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </td>
+                <td style={{ padding: "8px 12px", display: "flex", gap: 8 }}>
+                  <button onClick={() => resetPassword(u.id, u.email)} style={{ fontSize: 12 }}>
+                    Reset Password
+                  </button>
+                  <button
+                    onClick={() => deleteUser(u.id, u.email)}
+                    disabled={isSelf}
+                    style={{ fontSize: 12, color: "white", background: isSelf ? "#999" : "#dc2626", border: "none", padding: "3px 8px", cursor: isSelf ? "not-allowed" : "pointer" }}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

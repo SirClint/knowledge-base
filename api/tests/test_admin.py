@@ -81,3 +81,16 @@ async def test_cannot_delete_own_account(admin_client):
     self_user = next(u for u in users if u["email"] == "admin@test.com")
     r = await admin_client.delete(f"/admin/users/{self_user['id']}")
     assert r.status_code == 400
+
+
+async def test_change_role_invalid_value(admin_client):
+    await admin_client.post("/auth/register", json={"email": "target2@test.com", "password": "pass", "role": "reader"})
+    users = (await admin_client.get("/admin/users")).json()
+    target = next(u for u in users if u["email"] == "target2@test.com")
+    r = await admin_client.patch(f"/admin/users/{target['id']}/role", json={"role": "superuser"})
+    assert r.status_code == 400
+
+
+async def test_reset_password_forbidden_for_reader(reader_client):
+    r = await reader_client.post("/admin/users/00000000-0000-0000-0000-000000000000/reset-password", json={"password": "newpass123"})
+    assert r.status_code == 403

@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from db.database import get_session
-from auth.users import User, require_admin, current_active_user, get_user_manager
+from auth.users import User, require_admin, get_user_manager
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -59,7 +59,7 @@ async def reset_password(
     user = await session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if len(body.password) < 8:
+    if len(body.password.strip()) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     user.hashed_password = user_manager.password_helper.hash(body.password)
     await session.commit()

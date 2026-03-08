@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { BASE } from "../api/client";
 
 export default function NavBar() {
   const [aiStatus, setAiStatus] = useState<"online" | "offline" | "checking">("checking");
   const navigate = useNavigate();
   const role = localStorage.getItem("role");
-  const BASE = import.meta.env.VITE_API_URL ?? "/kms/api";
 
   async function checkAi() {
     try {

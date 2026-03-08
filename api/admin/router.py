@@ -35,10 +35,12 @@ async def change_role(
     user_id: uuid.UUID,
     body: RoleUpdate,
     session: AsyncSession = Depends(get_session),
-    _: User = Depends(require_admin),
+    current: User = Depends(require_admin),
 ):
     if body.role not in ("reader", "editor", "admin"):
         raise HTTPException(status_code=400, detail="Invalid role")
+    if current.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
     user = await session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -59,9 +61,10 @@ async def reset_password(
     user = await session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if len(body.password.strip()) < 8:
+    stripped = body.password.strip()
+    if len(stripped) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    user.hashed_password = user_manager.password_helper.hash(body.password)
+    user.hashed_password = user_manager.password_helper.hash(stripped)
     await session.commit()
     return {"ok": True}
 

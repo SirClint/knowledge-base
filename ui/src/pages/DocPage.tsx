@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, BASE } from "../api/client";
 import DocViewer from "../components/DocViewer";
 import Editor from "../components/Editor";
 
@@ -30,7 +30,6 @@ export default function DocPage() {
 
   useEffect(() => {
     if (!isNew) return;
-    const BASE = import.meta.env.VITE_API_URL ?? "/kms/api";
     fetch(`${BASE}/health/ai`).then(r => r.json()).then(d => setAiOnline(d.ai === "online"));
     api.getFolders().then(setFolders);
   }, [isNew]);

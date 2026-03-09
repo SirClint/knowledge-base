@@ -89,6 +89,10 @@ async def delete_doc(path: str, session: AsyncSession) -> bool:
     full_path = Path(settings.vault_path) / path
     if full_path.exists():
         full_path.unlink()
+    # Clean up associated versions and comments
+    from db.models import DocVersion, Comment
+    await session.execute(delete(DocVersion).where(DocVersion.doc_path == path))
+    await session.execute(delete(Comment).where(Comment.doc_path == path))
     await session.delete(doc)
     await session.commit()
     return True

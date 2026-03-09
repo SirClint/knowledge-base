@@ -76,6 +76,11 @@ from versions.router import router as versions_router
 
 app.include_router(versions_router)
 
+# ── Comments routes ───────────────────────────────────────────────────────────
+from comments.router import router as comments_router
+
+app.include_router(comments_router)
+
 
 @app.get("/health")
 async def health():

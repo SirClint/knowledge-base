@@ -136,6 +136,7 @@ docker compose -f docker-compose.test.yml exec api pytest -v   # Backend tests a
 - [ ] `body_preview` should update on doc save, not just create
 - [ ] Smoke E2E test should skip gracefully when Ollama is offline (not fail hard)
 - [ ] Mailgun replay token deduplication (currently only 15-minute timestamp window)
+- [ ] `/health/summary` review queue count uses `get_overdue_docs()` (fetches all docs into memory); replace with a COUNT SQL query as doc count grows
 
 # currentDate
 Today's date is 2026-03-09.

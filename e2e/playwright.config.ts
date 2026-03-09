@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 60_000,
   retries: 0,
   use: {
-    baseURL: "http://localhost:8080/kms/",
+    baseURL: "http://localhost:8081/kms/",
     headless: true,
   },
   projects: [

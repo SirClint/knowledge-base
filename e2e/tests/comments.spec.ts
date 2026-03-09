@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { registerAndLogin } from "./helpers";
 
-const BASE_API = "http://localhost:8080/kms/api";
+const BASE_API = "http://localhost:8081/kms/api";
 
 /** Extract the JWT token from localStorage */
 async function getToken(page: import("@playwright/test").Page): Promise<string> {

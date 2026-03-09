@@ -17,7 +17,7 @@ test.describe("Admin User Management", () => {
 
     // Create a target user via API
     const targetEmail = uniqueEmail();
-    const res = await page.request.post("http://localhost:8080/kms/api/auth/register", {
+    const res = await page.request.post("http://localhost:8081/kms/api/auth/register", {
       data: { email: targetEmail, password: "testpassword123", role: "reader" },
     });
     if (!res.ok()) throw new Error(`Register failed: ${res.status()} ${await res.text()}`);
@@ -42,7 +42,7 @@ test.describe("Admin User Management", () => {
     await registerAndLogin(page, { role: "admin" });
 
     const targetEmail = uniqueEmail();
-    const res = await page.request.post("http://localhost:8080/kms/api/auth/register", {
+    const res = await page.request.post("http://localhost:8081/kms/api/auth/register", {
       data: { email: targetEmail, password: "testpassword123", role: "reader" },
     });
     if (!res.ok()) throw new Error(`Register failed: ${res.status()} ${await res.text()}`);

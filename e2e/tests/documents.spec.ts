@@ -54,7 +54,7 @@ test.describe("Documents", () => {
   test("search for a document by keyword", async ({ page }) => {
     // First create a doc
     const title = `Searchable ${Date.now()}`;
-    await page.request.post("http://localhost:8080/kms/api/docs", {
+    await page.request.post("http://localhost:8081/kms/api/docs", {
       headers: { Authorization: `Bearer ${await getToken(page)}` },
       data: { title, path: `personal/${title.toLowerCase().replace(/\s+/g, "-")}.md`, body: "Unique searchable content here", tags: [] },
     });
@@ -74,7 +74,7 @@ test.describe("Documents", () => {
     const body = "This content should be fully visible on the doc page.";
     const path = `personal/${title.toLowerCase().replace(/\s+/g, "-")}.md`;
 
-    await page.request.post("http://localhost:8080/kms/api/docs", {
+    await page.request.post("http://localhost:8081/kms/api/docs", {
       headers: { Authorization: `Bearer ${await getToken(page)}` },
       data: { title, path, body, tags: [] },
     });
@@ -93,14 +93,14 @@ test.describe("Documents", () => {
     // Create a doc in team/processes
     const title = `Process Doc ${Date.now()}`;
     const path = `team/processes/${title.toLowerCase().replace(/\s+/g, "-")}.md`;
-    await page.request.post("http://localhost:8080/kms/api/docs", {
+    await page.request.post("http://localhost:8081/kms/api/docs", {
       headers: { Authorization: `Bearer ${await getToken(page)}` },
       data: { title, path, body: "Process content", tags: [] },
     });
 
     // Create a doc in personal (to confirm it's NOT shown)
     const otherTitle = `Personal Note ${Date.now()}`;
-    await page.request.post("http://localhost:8080/kms/api/docs", {
+    await page.request.post("http://localhost:8081/kms/api/docs", {
       headers: { Authorization: `Bearer ${await getToken(page)}` },
       data: {
         title: otherTitle,
@@ -130,7 +130,7 @@ test.describe("Documents", () => {
     const title = `Editable ${Date.now()}`;
     const path = `personal/${title.toLowerCase().replace(/\s+/g, "-")}.md`;
 
-    await page.request.post("http://localhost:8080/kms/api/docs", {
+    await page.request.post("http://localhost:8081/kms/api/docs", {
       headers: { Authorization: `Bearer ${await getToken(page)}` },
       data: { title, path, body: "Original content", tags: [] },
     });

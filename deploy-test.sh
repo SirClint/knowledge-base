@@ -27,6 +27,7 @@ git pull origin "$BRANCH"
 
 echo ""
 echo "Step 4/4: Rebuilding and restarting test stack..."
+export APP_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 docker compose -f docker-compose.test.yml build api ui
 docker compose -f docker-compose.test.yml up -d
 

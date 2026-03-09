@@ -98,3 +98,37 @@ async def health_ai():
     except Exception:
         pass
     return {"ai": "offline"}
+
+
+@app.get("/health/summary")
+async def health_summary():
+    import httpx
+    from sqlalchemy import select, func
+    from db.models import Document
+    from auth.users import User
+    from db.database import async_session_maker
+    from scheduler.jobs import get_overdue_docs
+
+    # AI status
+    ai_status = "offline"
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            r = await client.get(f"{settings.ollama_url}/api/tags")
+            if r.status_code == 200:
+                ai_status = "online"
+    except Exception:
+        pass
+
+    # DB counts — use get_overdue_docs for accurate review queue (includes time-overdue docs)
+    async with async_session_maker() as session:
+        doc_count = (await session.execute(select(func.count()).select_from(Document))).scalar() or 0
+        user_count = (await session.execute(select(func.count()).select_from(User))).scalar() or 0
+        review_count = len(await get_overdue_docs(session))
+
+    return {
+        "app_version": settings.app_version,
+        "doc_count": doc_count,
+        "user_count": user_count,
+        "review_queue_count": review_count,
+        "ai": ai_status,
+    }

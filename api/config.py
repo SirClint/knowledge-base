@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     chromadb_path: str = "/data/chroma"
     mailgun_webhook_signing_key: str = ""
     ingest_email_whitelist: str = ""  # comma-separated emails, e.g. "you@example.com,other@example.com"
+    app_version: str = "unknown"
 
     class Config:
         env_file = ".env"

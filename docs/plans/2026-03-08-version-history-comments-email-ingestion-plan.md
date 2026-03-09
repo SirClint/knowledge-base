@@ -1170,18 +1170,54 @@ git push
 
 ## Mailgun Setup Instructions (Manual, One-Time)
 
-After implementation is deployed:
+You'll set up **two Mailgun routes** — one pointing at your test environment (port 8081) and one at prod (port 8080). Both use the same Mailgun signing key but different recipient addresses and different `.env` files.
+
+### Step 1: Mailgun account and domain
 
 1. Sign up at https://www.mailgun.com (free tier)
-2. Add your domain (or use the sandbox domain for testing)
-3. Go to **Receiving → Routes**, create a route:
-   - Expression: `match_recipient("kms@mg.yourdomain.com")`
-   - Action: `forward("https://yourhost/kms/api/ingest/email")`
-4. Go to **Settings → API Security**, copy the **HTTP webhook signing key**
-5. Add to `.env`:
-   ```
-   MAILGUN_WEBHOOK_SIGNING_KEY=<your key>
-   INGEST_EMAIL_WHITELIST=you@youremail.com
-   ```
-6. Restart the API: `docker compose up -d api`
-7. Send a test email to `kms@mg.yourdomain.com` and check the review queue
+2. Add your domain (or use the Mailgun sandbox domain for initial testing)
+3. Go to **Settings → API Security**, copy the **HTTP webhook signing key** — you'll use this in both environments
+
+### Step 2: Create two inbound routes
+
+Go to **Receiving → Routes** and create two routes:
+
+**Test route:**
+- Expression: `match_recipient("kms-test@mg.yourdomain.com")`
+- Action: `forward("http://yourhost:8081/kms/api/ingest/email")`
+
+**Prod route:**
+- Expression: `match_recipient("kms@mg.yourdomain.com")`
+- Action: `forward("http://yourhost:8080/kms/api/ingest/email")`
+
+> Note: Mailgun must be able to reach your host over HTTP/HTTPS. If running locally without a public URL, use a tunnel like [ngrok](https://ngrok.com) during setup: `ngrok http 8080` gives you a public URL to use in the route.
+
+### Step 3: Configure each environment
+
+**Test environment (`.env.test`):**
+```
+MAILGUN_WEBHOOK_SIGNING_KEY=<your signing key>
+INGEST_EMAIL_WHITELIST=you@youremail.com
+```
+
+**Production environment (`.env`):**
+```
+MAILGUN_WEBHOOK_SIGNING_KEY=<your signing key>
+INGEST_EMAIL_WHITELIST=you@youremail.com
+```
+
+### Step 4: Restart the API in each environment
+
+```bash
+# Test
+docker compose -f docker-compose.test.yml up -d api
+
+# Prod
+docker compose up -d api
+```
+
+### Step 5: Verify
+
+Send a test email to `kms-test@mg.yourdomain.com` and check the review queue at http://localhost:8081/kms/review.
+
+Once confirmed working in test, send to `kms@mg.yourdomain.com` and check http://localhost:8080/kms/review.

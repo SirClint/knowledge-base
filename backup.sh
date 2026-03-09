@@ -48,7 +48,11 @@ docker run --rm \
 
 # 4. Create archive
 tar -czf "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" -C /tmp "kms-backup-${BACKUP_NAME}"
-rm -rf "$STAGING_DIR"
+# Use busybox to remove staging dir — ChromaDB files are owned by root (written by container)
+docker run --rm \
+  -v "/tmp:/tmp" \
+  busybox \
+  rm -rf "$STAGING_DIR"
 
 echo "Backup saved: backups/${BACKUP_NAME}.tar.gz"
 

@@ -19,7 +19,8 @@ if [[ "$CONFIRM" != "yes" ]]; then
 fi
 
 echo ""
-echo "Step 3/4: Pulling latest code from main..."
+echo "Step 3/4: Switching to main and pulling latest code..."
+git checkout main
 git pull origin main
 
 echo ""

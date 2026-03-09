@@ -16,7 +16,7 @@ export async function registerAndLogin(
   const role = options.role ?? "admin";
 
   // Register via API (faster and more reliable than UI)
-  const res = await page.request.post("http://localhost:8080/kms/api/auth/register", {
+  const res = await page.request.post("http://localhost:8081/kms/api/auth/register", {
     data: { email, password: TEST_PASSWORD, role },
   });
   if (!res.ok()) {

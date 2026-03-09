@@ -28,15 +28,26 @@ Desktop launchers (`kms.desktop`, `kms-test.desktop`) in the project root can be
 ## Development Workflow
 
 ```
-feature branch → test environment → PR to main → deploy to prod
+feature branch → test environment → deploy-test → PR to main → deploy to prod
 ```
 
 1. **Create a feature branch** and develop your changes
-2. **Run the test environment**: `./start.sh --test`
-3. **Test your changes** at http://localhost:8081/kms
-4. **Commit and push** your branch, open a Pull Request on GitHub
-5. **Merge the PR** to `main` after review
-6. **Deploy to production**: `./deploy.sh`
+2. **Start the test environment**: `./start.sh --test`
+3. **Test your changes** manually at http://localhost:8081/kms
+4. **Run the test deploy** to verify the deploy process itself works: `./deploy-test.sh`
+   - Backs up test data, confirms, pulls current branch, rebuilds, restarts test stack
+5. **Commit and push** your branch, open a Pull Request on GitHub
+6. **Merge the PR** to `main` after review
+7. **Deploy to production**: `./deploy.sh`
+
+### deploy-test.sh vs deploy.sh
+
+| | `deploy-test.sh` | `deploy.sh` |
+|---|---|---|
+| Target | Test (port 8081) | Production (port 8080) |
+| Branch pulled | Current branch | `main` |
+| Backup | `--env test` | `--env prod` |
+| Purpose | Verify the deploy process safely | Ship to production |
 
 ---
 

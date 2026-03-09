@@ -44,7 +44,8 @@ export default function DocPage() {
   useEffect(() => {
     if (!isNew && path) {
       api.getDoc(path).then(setDoc).catch(() => setError("Document not found"));
-      loadComments();
+      // Inline to avoid stale-closure dep warning; loadComments() still used by handlers
+      api.listComments(path).then(setComments).catch(() => {});
     }
   }, [path, isNew]);
 
@@ -134,6 +135,7 @@ export default function DocPage() {
   }
 
   async function removeComment(id: number) {
+    setCommentError("");
     try {
       await api.deleteComment(id);
       loadComments();

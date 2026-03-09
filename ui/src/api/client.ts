@@ -58,4 +58,6 @@ export const api = {
   changeRole: (id: string, role: string) => request(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   resetPassword: (id: string, password: string) => request(`/admin/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) }),
   deleteUser: (id: string) => request(`/admin/users/${id}`, { method: "DELETE" }),
+  listVersions: (path: string) => request(`/versions/${path}`),
+  restoreVersion: (path: string, versionId: number) => request(`/versions/${path}/restore/${versionId}`, { method: "POST" }),
 };

@@ -21,6 +21,9 @@ export default function DocPage() {
   const [manualTitle, setManualTitle] = useState("");
   const [manualFolder, setManualFolder] = useState("");
   const [aiOnline, setAiOnline] = useState<boolean | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [versions, setVersions] = useState<{id: number; saved_by: string; saved_at: string}[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
 
   useEffect(() => {
     if (!isNew && path) {
@@ -61,6 +64,33 @@ export default function DocPage() {
     }
   }
 
+  async function loadVersions() {
+    if (!path || isNew) return;
+    setLoadingVersions(true);
+    try {
+      const data = await api.listVersions(path);
+      setVersions(data);
+    } catch {
+      // non-critical — history panel stays empty
+    } finally {
+      setLoadingVersions(false);
+    }
+  }
+
+  async function restoreVersion(versionId: number) {
+    if (!window.confirm("Restore this version? The current content will be saved as a new version first.")) return;
+    setError("");
+    try {
+      await api.restoreVersion(path!, versionId);
+      const updated = await api.getDoc(path!);
+      setDoc(updated);
+      setShowHistory(false);
+      setVersions([]);
+    } catch (e: any) {
+      setError(e.message ?? "Restore failed");
+    }
+  }
+
   async function manualCreate() {
     if (!manualTitle.trim() || !manualFolder) return;
     setError("");
@@ -79,6 +109,7 @@ export default function DocPage() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => navigate("/")}>← Back</button>
         {!isNew && !editing && <button onClick={() => setEditing(true)}>Edit</button>}
+        {!isNew && !editing && <button onClick={() => { setShowHistory(h => !h); if (!showHistory) loadVersions(); }}>History</button>}
         {!isNew && editing && <button onClick={save}>Save</button>}
         {!isNew && editing && <button onClick={() => setEditing(false)}>Cancel</button>}
         {!isNew && error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}
@@ -181,7 +212,36 @@ export default function DocPage() {
           <Editor value={doc.body} onChange={body => setDoc(d => ({ ...d, body }))} />
         </>
       ) : (
-        <DocViewer title={doc.title} body={doc.body} />
+        <>
+          <DocViewer title={doc.title} body={doc.body} />
+          {showHistory && (
+            <div style={{
+              marginTop: 24, padding: 16, background: "#f8f8f8",
+              borderRadius: 4, border: "1px solid #ddd"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <strong>Version History</strong>
+                <button onClick={() => setShowHistory(false)} style={{ fontSize: 11 }}>Close</button>
+              </div>
+              {loadingVersions && <div style={{ color: "#888", fontSize: 13 }}>Loading...</div>}
+              {!loadingVersions && versions.length === 0 && (
+                <div style={{ color: "#888", fontSize: 13 }}>No saved versions yet. Versions are created each time you save.</div>
+              )}
+              {versions.map(v => (
+                <div key={v.id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "6px 0", borderBottom: "1px solid #eee", fontSize: 13
+                }}>
+                  <span>
+                    <span style={{ color: "#555" }}>{new Date(v.saved_at).toLocaleString()}</span>
+                    <span style={{ color: "#888", marginLeft: 8 }}>by {v.saved_by || "unknown"}</span>
+                  </span>
+                  <button onClick={() => restoreVersion(v.id)} style={{ fontSize: 11 }}>Restore</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

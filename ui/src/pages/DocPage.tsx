@@ -109,7 +109,7 @@ export default function DocPage() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => navigate("/")}>← Back</button>
         {!isNew && !editing && <button onClick={() => setEditing(true)}>Edit</button>}
-        {!isNew && !editing && <button onClick={() => { setShowHistory(h => !h); if (!showHistory) loadVersions(); }}>History</button>}
+        {!isNew && !editing && <button onClick={() => { const opening = !showHistory; setShowHistory(opening); if (opening) loadVersions(); }}>History</button>}
         {!isNew && editing && <button onClick={save}>Save</button>}
         {!isNew && editing && <button onClick={() => setEditing(false)}>Cancel</button>}
         {!isNew && error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}

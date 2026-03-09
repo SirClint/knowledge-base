@@ -126,7 +126,9 @@ printf "  %-18s %-26s %s\n" "Version" "$PROD_VER_LABEL" "$TEST_VER_LABEL"
 printf "  %-18s %-26s %s\n" "AI" "$PROD_AI" "$TEST_AI"
 printf "  %-18s %-26s %s\n" "Documents" "$PROD_DOCS" "$TEST_DOCS"
 printf "  %-18s %-26s %s\n" "Users" "$PROD_USERS" "$TEST_USERS"
-printf "  %-18s %-26s %s\n" "Review Queue" "${PROD_QUEUE} pending" "${TEST_QUEUE} pending"
+PROD_QUEUE_LABEL=$([[ "$PROD_QUEUE" == "—" ]] && echo "—" || echo "${PROD_QUEUE} pending")
+TEST_QUEUE_LABEL=$([[ "$TEST_QUEUE" == "—" ]] && echo "—" || echo "${TEST_QUEUE} pending")
+printf "  %-18s %-26s %s\n" "Review Queue" "$PROD_QUEUE_LABEL" "$TEST_QUEUE_LABEL"
 echo ""
 printf "  %-18s %s\n" "Last Backup"    "prod: $PROD_BACKUP_LABEL"
 printf "  %-18s %s\n" ""               "test: $TEST_BACKUP_LABEL"

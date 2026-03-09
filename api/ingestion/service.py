@@ -18,7 +18,7 @@ async def ingest_message(message: str, session: AsyncSession) -> dict:
     needs_review = intent.get("needs_review", False)
 
     if action == "update" and path:
-        doc = await update_doc(path, {"title": title, "body": body}, session)
+        doc = await update_doc(path, {"title": title, "body": body}, session, saved_by="ingestion")
         if needs_review and doc:
             doc.status = "needs_review"
             await session.commit()

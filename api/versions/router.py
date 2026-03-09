@@ -5,9 +5,6 @@ from db.database import get_session
 from db.models import DocVersion
 from auth.users import current_active_user, require_editor, User
 from docs_.service import get_doc, update_doc
-from pathlib import Path
-from config import settings
-import frontmatter
 
 router = APIRouter(prefix="/versions", tags=["versions"])
 
@@ -21,7 +18,7 @@ async def list_versions(path: str, session: AsyncSession = Depends(get_session),
     )
     versions = result.scalars().all()
     return [
-        {"id": v.id, "saved_by": v.saved_by, "saved_at": str(v.saved_at)}
+        {"id": v.id, "saved_by": v.saved_by, "saved_at": v.saved_at.isoformat() if v.saved_at else ""}
         for v in versions
     ]
 
@@ -41,13 +38,6 @@ async def restore_version(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Snapshot current state before restoring (so restore is itself reversible)
-    full_path = Path(settings.vault_path) / path
-    if full_path.exists():
-        post = frontmatter.load(str(full_path))
-        current_snapshot = DocVersion(doc_path=path, body=post.content, saved_by=user.email)
-        session.add(current_snapshot)
-
-    # Write the restored body via update_doc (which will snapshot again — that's OK, it creates a restore trail)
+    # update_doc snapshots the current body before overwriting — no manual snapshot needed
     await update_doc(path, {"body": version.body}, session, saved_by=user.email)
     return {"restored": True, "path": path}

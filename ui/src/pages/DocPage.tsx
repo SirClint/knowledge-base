@@ -55,6 +55,17 @@ export default function DocPage() {
     api.getFolders().then(setFolders);
   }, [isNew]);
 
+  async function deleteDoc() {
+    if (!window.confirm(`Delete "${doc.title || path}"? This cannot be undone.`)) return;
+    setError("");
+    try {
+      await api.deleteDoc(path!);
+      navigate("/");
+    } catch (e: any) {
+      setError(e.message ?? "Delete failed");
+    }
+  }
+
   async function save() {
     setError("");
     try {
@@ -150,6 +161,11 @@ export default function DocPage() {
         <button onClick={() => navigate("/")}>← Back</button>
         {!isNew && !editing && <button onClick={() => setEditing(true)}>Edit</button>}
         {!isNew && !editing && <button onClick={() => { const opening = !showHistory; setShowHistory(opening); if (opening) loadVersions(); }}>History</button>}
+        {!isNew && !editing && currentRole === "admin" && (
+          <button onClick={deleteDoc} style={{ color: "white", background: "#dc2626", border: "none", padding: "4px 10px", cursor: "pointer", borderRadius: 3 }}>
+            Delete
+          </button>
+        )}
         {!isNew && editing && <button onClick={save}>Save</button>}
         {!isNew && editing && <button onClick={() => setEditing(false)}>Cancel</button>}
         {!isNew && error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}

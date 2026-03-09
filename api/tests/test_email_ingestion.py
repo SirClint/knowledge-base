@@ -34,7 +34,7 @@ async def test_email_ingestion_valid(client):
 
     with patch("config.settings.mailgun_webhook_signing_key", signing_key), \
          patch("config.settings.ingest_email_whitelist", "sender@example.com"), \
-         patch("ingestion.service.ingest_message", new=AsyncMock(return_value=mock_result)):
+         patch("ingestion.router.ingest_message", new=AsyncMock(return_value=mock_result)):
         r = await client.post("/ingest/email", data={
             "timestamp": timestamp,
             "token": token,

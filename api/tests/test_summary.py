@@ -54,7 +54,6 @@ async def test_summary_no_auth_required(client):
 
 
 async def test_summary_app_version_from_env(client):
-    import os
     from unittest.mock import patch
     with patch("config.settings.app_version", "abc1234"):
         r = await client.get("/health/summary")

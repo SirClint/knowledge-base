@@ -107,6 +107,7 @@ async def health_summary():
     from db.models import Document
     from auth.users import User
     from db.database import async_session_maker
+    from scheduler.jobs import get_overdue_docs
 
     # AI status
     ai_status = "offline"
@@ -118,15 +119,11 @@ async def health_summary():
     except Exception:
         pass
 
-    # DB counts
+    # DB counts — use get_overdue_docs for accurate review queue (includes time-overdue docs)
     async with async_session_maker() as session:
         doc_count = (await session.execute(select(func.count()).select_from(Document))).scalar() or 0
         user_count = (await session.execute(select(func.count()).select_from(User))).scalar() or 0
-        review_count = (await session.execute(
-            select(func.count()).select_from(Document).where(
-                Document.status.in_(["needs_review", "overdue"])
-            )
-        )).scalar() or 0
+        review_count = len(await get_overdue_docs(session))
 
     return {
         "app_version": settings.app_version,

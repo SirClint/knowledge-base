@@ -24,10 +24,27 @@ export default function DocPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [versions, setVersions] = useState<{id: number; saved_by: string; saved_at: string}[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
+  const [comments, setComments] = useState<{id: number; body: string; author_email: string; created_at: string}[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [commentError, setCommentError] = useState("");
+
+  const currentEmail = localStorage.getItem("email") ?? "";
+  const currentRole = localStorage.getItem("role") ?? "reader";
+
+  async function loadComments() {
+    if (!path || isNew) return;
+    try {
+      const data = await api.listComments(path);
+      setComments(data);
+    } catch {
+      // non-critical
+    }
+  }
 
   useEffect(() => {
     if (!isNew && path) {
       api.getDoc(path).then(setDoc).catch(() => setError("Document not found"));
+      loadComments();
     }
   }, [path, isNew]);
 
@@ -101,6 +118,27 @@ export default function DocPage() {
       navigate(`/doc/${path}`);
     } catch (e: any) {
       setError(e.message ?? "Create failed");
+    }
+  }
+
+  async function submitComment() {
+    if (!newComment.trim()) return;
+    setCommentError("");
+    try {
+      await api.addComment(path!, newComment);
+      setNewComment("");
+      loadComments();
+    } catch (e: any) {
+      setCommentError(e.message ?? "Failed to add comment");
+    }
+  }
+
+  async function removeComment(id: number) {
+    try {
+      await api.deleteComment(id);
+      loadComments();
+    } catch (e: any) {
+      setCommentError(e.message ?? "Failed to delete comment");
     }
   }
 
@@ -241,6 +279,53 @@ export default function DocPage() {
               ))}
             </div>
           )}
+          <div style={{ marginTop: 32, borderTop: "1px solid #eee", paddingTop: 24 }}>
+            <strong style={{ fontSize: 15 }}>
+              Comments {comments.length > 0 && `(${comments.length})`}
+            </strong>
+            <div style={{ marginTop: 12 }}>
+              {comments.map(c => (
+                <div key={c.id} style={{ padding: "10px 0", borderBottom: "1px solid #f0f0f0", fontSize: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <span style={{ fontWeight: "bold", fontSize: 12, color: "#555" }}>{c.author_email}</span>
+                      <span style={{ color: "#aaa", fontSize: 11, marginLeft: 8 }}>
+                        {new Date(c.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    {(c.author_email === currentEmail || currentRole === "editor" || currentRole === "admin") && (
+                      <button
+                        onClick={() => removeComment(c.id)}
+                        style={{ fontSize: 11, color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 4 }}>{c.body}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <textarea
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                style={{
+                  display: "block", width: "100%", height: 80, padding: 8,
+                  fontSize: 13, boxSizing: "border-box", resize: "vertical"
+                }}
+              />
+              {commentError && <div style={{ color: "red", fontSize: 12, marginTop: 4 }}>{commentError}</div>}
+              <button
+                onClick={submitComment}
+                disabled={!newComment.trim()}
+                style={{ marginTop: 6, fontSize: 13 }}
+              >
+                Add Comment
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>

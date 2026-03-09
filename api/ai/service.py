@@ -15,13 +15,34 @@ SYSTEM_STALE = (
 )
 
 
+def _extract_json(text: str) -> str:
+    """Extract the first JSON object or array from a model response.
+
+    Handles models that wrap JSON in markdown code fences or add
+    explanatory text before/after the JSON.
+    """
+    text = text.strip()
+    # Strip markdown code fences if present
+    if text.startswith("```"):
+        lines = text.splitlines()
+        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+        text = "\n".join(inner).strip()
+    # Find the outermost JSON object or array
+    for start_char, end_char in [('{', '}'), ('[', ']')]:
+        start = text.find(start_char)
+        end = text.rfind(end_char)
+        if start != -1 and end != -1 and end > start:
+            return text[start:end + 1]
+    return text
+
+
 async def _ollama(prompt: str, system: str) -> str:
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(
             f"{settings.ollama_url}/api/generate",
             json={"model": "llama3.2", "prompt": prompt, "system": system, "stream": False},
         )
-        return r.json()["response"]
+        return _extract_json(r.json()["response"])
 
 
 async def suggest_tags(body: str, existing_tags: list[str]) -> list[str]:

@@ -71,6 +71,11 @@ from admin.router import router as admin_router
 
 app.include_router(admin_router)
 
+# ── Versions routes ───────────────────────────────────────────────────────────
+from versions.router import router as versions_router
+
+app.include_router(versions_router)
+
 
 @app.get("/health")
 async def health():

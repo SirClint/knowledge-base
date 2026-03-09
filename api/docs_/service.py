@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from db.models import Document
 from config import settings
 import frontmatter
@@ -34,13 +34,42 @@ async def get_doc(path: str, session: AsyncSession) -> Document | None:
     return result.scalar_one_or_none()
 
 
-async def update_doc(path: str, updates: dict, session: AsyncSession) -> Document | None:
+async def update_doc(path: str, updates: dict, session: AsyncSession, saved_by: str = "") -> Document | None:
     doc = await get_doc(path, session)
     if not doc:
         return None
+
+    # Snapshot current body before overwriting
+    full_path = Path(settings.vault_path) / path
+    if full_path.exists() and ("body" in updates or "title" in updates):
+        from db.models import DocVersion
+
+        post = frontmatter.load(str(full_path))
+        current_body = post.content
+
+        snapshot = DocVersion(doc_path=path, body=current_body, saved_by=saved_by)
+        session.add(snapshot)
+        await session.flush()
+
+        # Prune: keep only the 50 most recent versions
+        subq = (
+            select(DocVersion.id)
+            .where(DocVersion.doc_path == path)
+            .order_by(DocVersion.saved_at.desc())
+            .limit(50)
+        ).subquery()
+        await session.execute(
+            delete(DocVersion).where(
+                DocVersion.doc_path == path,
+                DocVersion.id.not_in(select(subq.c.id))
+            )
+        )
+
+    # Apply updates to DB record
     for key, value in updates.items():
         setattr(doc, key, value)
-    full_path = Path(settings.vault_path) / path
+
+    # Apply updates to vault file
     if full_path.exists():
         post = frontmatter.load(str(full_path))
         if "title" in updates:
@@ -48,6 +77,7 @@ async def update_doc(path: str, updates: dict, session: AsyncSession) -> Documen
         if "body" in updates:
             post.content = updates["body"]
         full_path.write_text(frontmatter.dumps(post))
+
     await session.commit()
     return doc
 
@@ -59,6 +89,10 @@ async def delete_doc(path: str, session: AsyncSession) -> bool:
     full_path = Path(settings.vault_path) / path
     if full_path.exists():
         full_path.unlink()
+    # Clean up associated versions and comments
+    from db.models import DocVersion, Comment
+    await session.execute(delete(DocVersion).where(DocVersion.doc_path == path))
+    await session.execute(delete(Comment).where(Comment.doc_path == path))
     await session.delete(doc)
     await session.commit()
     return True

@@ -21,7 +21,7 @@ OLLAMA_PID_FILE="/tmp/ollama-kms.pid"
 # Start Ollama if not already running
 if ! pgrep -x "ollama" > /dev/null 2>&1; then
   echo "Starting Ollama..."
-  ollama serve &>/tmp/ollama-kms.log &
+  OLLAMA_HOST=0.0.0.0 ollama serve &>/tmp/ollama-kms.log &
   echo $! > "$OLLAMA_PID_FILE"
   # Wait up to 10 seconds for Ollama to be ready
   OLLAMA_READY=0
@@ -39,6 +39,30 @@ if ! pgrep -x "ollama" > /dev/null 2>&1; then
   fi
 else
   echo "Ollama is already running."
+fi
+
+# Verify Ollama is reachable from Docker containers
+echo "Checking Ollama is reachable from Docker..."
+DOCKER_GATEWAY=$(docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null || echo "")
+OLLAMA_DOCKER_OK=0
+if [[ -n "$DOCKER_GATEWAY" ]]; then
+  if curl -sf "http://${DOCKER_GATEWAY}:11434/api/tags" > /dev/null 2>&1; then
+    OLLAMA_DOCKER_OK=1
+  fi
+fi
+if [[ "$OLLAMA_DOCKER_OK" -eq 0 ]]; then
+  echo ""
+  echo "WARNING: Ollama is not reachable from Docker containers."
+  echo "AI features will show as offline in the UI."
+  echo ""
+  echo "To fix:"
+  echo "  1. Ensure Ollama binds to all interfaces:"
+  echo "     sudo sh -c 'mkdir -p /etc/systemd/system/ollama.service.d && echo \"[Service]\nEnvironment=\\\"OLLAMA_HOST=0.0.0.0\\\"\" > /etc/systemd/system/ollama.service.d/override.conf'"
+  echo "     sudo systemctl daemon-reload && sudo systemctl restart ollama"
+  echo "  2. Allow Docker bridge through firewall:"
+  echo "     sudo ufw allow in on docker0 to any port 11434"
+  echo "  3. Re-run: ./start.sh"
+  echo ""
 fi
 
 # Start Docker stack

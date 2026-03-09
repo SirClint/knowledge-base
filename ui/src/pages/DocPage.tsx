@@ -21,10 +21,31 @@ export default function DocPage() {
   const [manualTitle, setManualTitle] = useState("");
   const [manualFolder, setManualFolder] = useState("");
   const [aiOnline, setAiOnline] = useState<boolean | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [versions, setVersions] = useState<{id: number; saved_by: string; saved_at: string}[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [comments, setComments] = useState<{id: number; body: string; author_email: string; created_at: string}[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [commentError, setCommentError] = useState("");
+
+  const currentEmail = localStorage.getItem("email") ?? "";
+  const currentRole = localStorage.getItem("role") ?? "reader";
+
+  async function loadComments() {
+    if (!path || isNew) return;
+    try {
+      const data = await api.listComments(path);
+      setComments(data);
+    } catch {
+      // non-critical
+    }
+  }
 
   useEffect(() => {
     if (!isNew && path) {
       api.getDoc(path).then(setDoc).catch(() => setError("Document not found"));
+      // Inline to avoid stale-closure dep warning; loadComments() still used by handlers
+      api.listComments(path).then(setComments).catch(() => {});
     }
   }, [path, isNew]);
 
@@ -33,6 +54,17 @@ export default function DocPage() {
     fetch(`${BASE}/health/ai`).then(r => r.json()).then(d => setAiOnline(d.ai === "online"));
     api.getFolders().then(setFolders);
   }, [isNew]);
+
+  async function deleteDoc() {
+    if (!window.confirm(`Delete "${doc.title || path}"? This cannot be undone.`)) return;
+    setError("");
+    try {
+      await api.deleteDoc(path!);
+      navigate("/");
+    } catch (e: any) {
+      setError(e.message ?? "Delete failed");
+    }
+  }
 
   async function save() {
     setError("");
@@ -61,6 +93,33 @@ export default function DocPage() {
     }
   }
 
+  async function loadVersions() {
+    if (!path || isNew) return;
+    setLoadingVersions(true);
+    try {
+      const data = await api.listVersions(path);
+      setVersions(data);
+    } catch {
+      // non-critical — history panel stays empty
+    } finally {
+      setLoadingVersions(false);
+    }
+  }
+
+  async function restoreVersion(versionId: number) {
+    if (!window.confirm("Restore this version? The current content will be saved as a new version first.")) return;
+    setError("");
+    try {
+      await api.restoreVersion(path!, versionId);
+      const updated = await api.getDoc(path!);
+      setDoc(updated);
+      setShowHistory(false);
+      setVersions([]);
+    } catch (e: any) {
+      setError(e.message ?? "Restore failed");
+    }
+  }
+
   async function manualCreate() {
     if (!manualTitle.trim() || !manualFolder) return;
     setError("");
@@ -74,11 +133,39 @@ export default function DocPage() {
     }
   }
 
+  async function submitComment() {
+    if (!newComment.trim()) return;
+    setCommentError("");
+    try {
+      await api.addComment(path!, newComment);
+      setNewComment("");
+      loadComments();
+    } catch (e: any) {
+      setCommentError(e.message ?? "Failed to add comment");
+    }
+  }
+
+  async function removeComment(id: number) {
+    setCommentError("");
+    try {
+      await api.deleteComment(id);
+      loadComments();
+    } catch (e: any) {
+      setCommentError(e.message ?? "Failed to delete comment");
+    }
+  }
+
   return (
     <div style={{ maxWidth: 900, margin: "40px auto", padding: 24 }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => navigate("/")}>← Back</button>
         {!isNew && !editing && <button onClick={() => setEditing(true)}>Edit</button>}
+        {!isNew && !editing && <button onClick={() => { const opening = !showHistory; setShowHistory(opening); if (opening) loadVersions(); }}>History</button>}
+        {!isNew && !editing && currentRole === "admin" && (
+          <button onClick={deleteDoc} style={{ color: "white", background: "#dc2626", border: "none", padding: "4px 10px", cursor: "pointer", borderRadius: 3 }}>
+            Delete
+          </button>
+        )}
         {!isNew && editing && <button onClick={save}>Save</button>}
         {!isNew && editing && <button onClick={() => setEditing(false)}>Cancel</button>}
         {!isNew && error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}
@@ -181,7 +268,83 @@ export default function DocPage() {
           <Editor value={doc.body} onChange={body => setDoc(d => ({ ...d, body }))} />
         </>
       ) : (
-        <DocViewer title={doc.title} body={doc.body} />
+        <>
+          <DocViewer title={doc.title} body={doc.body} />
+          {showHistory && (
+            <div style={{
+              marginTop: 24, padding: 16, background: "#f8f8f8",
+              borderRadius: 4, border: "1px solid #ddd"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <strong>Version History</strong>
+                <button onClick={() => setShowHistory(false)} style={{ fontSize: 11 }}>Close</button>
+              </div>
+              {loadingVersions && <div style={{ color: "#888", fontSize: 13 }}>Loading...</div>}
+              {!loadingVersions && versions.length === 0 && (
+                <div style={{ color: "#888", fontSize: 13 }}>No saved versions yet. Versions are created each time you save.</div>
+              )}
+              {versions.map(v => (
+                <div key={v.id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "6px 0", borderBottom: "1px solid #eee", fontSize: 13
+                }}>
+                  <span>
+                    <span style={{ color: "#555" }}>{new Date(v.saved_at).toLocaleString()}</span>
+                    <span style={{ color: "#888", marginLeft: 8 }}>by {v.saved_by || "unknown"}</span>
+                  </span>
+                  <button onClick={() => restoreVersion(v.id)} style={{ fontSize: 11 }}>Restore</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ marginTop: 32, borderTop: "1px solid #eee", paddingTop: 24 }}>
+            <strong style={{ fontSize: 15 }}>
+              Comments {comments.length > 0 && `(${comments.length})`}
+            </strong>
+            <div style={{ marginTop: 12 }}>
+              {comments.map(c => (
+                <div key={c.id} style={{ padding: "10px 0", borderBottom: "1px solid #f0f0f0", fontSize: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <span style={{ fontWeight: "bold", fontSize: 12, color: "#555" }}>{c.author_email}</span>
+                      <span style={{ color: "#aaa", fontSize: 11, marginLeft: 8 }}>
+                        {new Date(c.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    {(c.author_email === currentEmail || currentRole === "editor" || currentRole === "admin") && (
+                      <button
+                        onClick={() => removeComment(c.id)}
+                        style={{ fontSize: 11, color: "#dc2626", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 4 }}>{c.body}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <textarea
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                style={{
+                  display: "block", width: "100%", height: 80, padding: 8,
+                  fontSize: 13, boxSizing: "border-box", resize: "vertical"
+                }}
+              />
+              {commentError && <div style={{ color: "red", fontSize: 12, marginTop: 4 }}>{commentError}</div>}
+              <button
+                onClick={submitComment}
+                disabled={!newComment.trim()}
+                style={{ marginTop: 6, fontSize: 13 }}
+              >
+                Add Comment
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

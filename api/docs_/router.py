@@ -62,9 +62,9 @@ async def read(path: str, session=Depends(get_session), user=Depends(current_act
 
 
 @router.put("/{path:path}", dependencies=[Depends(require_editor)])
-async def update(path: str, payload: DocUpdate, session=Depends(get_session)):
+async def update(path: str, payload: DocUpdate, session=Depends(get_session), user=Depends(current_active_user)):
     updates = payload.model_dump(exclude_none=True)
-    doc = await update_doc(path, updates, session)
+    doc = await update_doc(path, updates, session, saved_by=user.email)
     if not doc:
         raise HTTPException(404)
     return doc

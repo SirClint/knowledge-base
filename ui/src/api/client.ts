@@ -29,6 +29,7 @@ export const api = {
         headers: { Authorization: `Bearer ${data.access_token}` },
       }).then(r => r.json());
       localStorage.setItem("role", me.role ?? "reader");
+      localStorage.setItem("email", me.email ?? "");
     }
     return data;
   },
@@ -58,4 +59,9 @@ export const api = {
   changeRole: (id: string, role: string) => request(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   resetPassword: (id: string, password: string) => request(`/admin/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) }),
   deleteUser: (id: string) => request(`/admin/users/${id}`, { method: "DELETE" }),
+  listVersions: (path: string) => request(`/versions/${path}`),
+  restoreVersion: (path: string, versionId: number) => request(`/versions/${path}/restore/${versionId}`, { method: "POST" }),
+  listComments: (path: string) => request(`/comments/${path}`),
+  addComment: (path: string, body: string) => request(`/comments/${path}`, { method: "POST", body: JSON.stringify({ body }) }),
+  deleteComment: (id: number) => request(`/comments/${id}`, { method: "DELETE" }),
 };

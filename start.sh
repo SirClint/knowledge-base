@@ -67,6 +67,7 @@ fi
 
 # Start Docker stack
 echo "Starting KMS ($ENV) on port $PORT..."
+export APP_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 docker compose -f "$COMPOSE_FILE" up -d
 
 # Open browser (try common Linux methods, then macOS)

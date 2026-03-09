@@ -5,6 +5,8 @@ services:
       - ./vault:/vault
       - kb_data:/data
     env_file: .env
+    environment:
+      - APP_VERSION
     depends_on:
       - chromadb
     extra_hosts:

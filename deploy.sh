@@ -24,6 +24,7 @@ git pull origin main
 
 echo ""
 echo "Step 4/4: Rebuilding and restarting production stack..."
+export APP_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 docker compose build api ui
 docker compose up -d
 

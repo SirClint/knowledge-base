@@ -20,3 +20,23 @@ class Document(Base):
     review_interval = Column(String, default="90d")
     body_preview = Column(String, default="")  # first 500 chars for list views
     indexed_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class DocVersion(Base):
+    __tablename__ = "doc_versions"
+
+    id = Column(Integer, primary_key=True)
+    doc_path = Column(String, nullable=False, index=True)
+    body = Column(String, nullable=False)
+    saved_by = Column(String, nullable=False, default="")
+    saved_at = Column(DateTime, server_default=func.now())
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True)
+    doc_path = Column(String, nullable=False, index=True)
+    body = Column(String, nullable=False)
+    author_email = Column(String, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())

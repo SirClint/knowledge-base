@@ -11,6 +11,33 @@ Environments are fully isolated — separate databases, separate vault directori
 
 ---
 
+## One-Time Host Setup
+
+These steps are required once on a new machine before the application will work correctly.
+
+### 1. Ollama binding
+Ollama must listen on all interfaces (not just localhost) so Docker containers can reach it:
+
+```bash
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+sudo sh -c 'echo "[Service]\nEnvironment=\"OLLAMA_HOST=0.0.0.0\"" > /etc/systemd/system/ollama.service.d/override.conf'
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+
+### 2. UFW firewall rule
+Allow Docker containers to reach Ollama on the host. This is a subnet-based rule — set it once and it survives all Docker network recreates:
+
+```bash
+sudo ufw allow from 172.18.0.0/16 to any port 11434
+```
+
+Verify with `sudo ufw status` — you should see one rule:
+```
+11434    ALLOW IN    172.18.0.0/16
+```
+
+---
+
 ## Starting and Stopping
 
 ```bash

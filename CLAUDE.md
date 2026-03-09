@@ -111,7 +111,7 @@ docker compose -f docker-compose.test.yml exec api pytest -v   # Backend tests a
 - **Role self-assignment** — registration endpoint doesn't restrict role selection (anyone can register as admin)
 - **JWT lifetime** — 1 hour, no refresh tokens
 - **UI uses inline styles** — no CSS framework
-- **Ollama UFW rule** — Docker bridge interface name changes on every `docker compose down`/`up`; UFW rule (`sudo ufw allow in on br-XXXXX to any port 11434`) must be re-added after network recreate. Find new interface with: `ip route | grep 172.18`
+- **Ollama UFW rule** — one-time setup: `sudo ufw allow from 172.18.0.0/16 to any port 11434`. Subnet-based so it survives Docker network recreates permanently.
 - **`body_preview` not updated on save** — DB preview field only set at create time; stale after edits
 - **Mailgun requires public URL** — email ingestion only works if host is reachable from internet (use ngrok for local testing)
 
@@ -132,7 +132,7 @@ docker compose -f docker-compose.test.yml exec api pytest -v   # Backend tests a
 - [ ] Role gate on `POST /ingest` — currently any authenticated user (including `reader`) can create/update docs via ingestion; should require `editor`/`admin`
 - [ ] Path traversal guard in `docs_/service.py` — vault path is not validated to stay within `VAULT_PATH` before file writes
 - [ ] Add `json.JSONDecodeError` handling to `suggest_tags` and `check_staleness` in `ai/service.py`
-- [ ] Permanent UFW rule for Ollama that survives Docker network recreate
+- [x] ~~Permanent UFW rule for Ollama~~ — fixed: subnet-based rule `sudo ufw allow from 172.18.0.0/16 to any port 11434`
 - [ ] `body_preview` should update on doc save, not just create
 - [ ] Smoke E2E test should skip gracefully when Ollama is offline (not fail hard)
 - [ ] Mailgun replay token deduplication (currently only 15-minute timestamp window)

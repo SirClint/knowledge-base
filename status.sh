@@ -45,9 +45,15 @@ commits_behind() {
   git rev-list "${version}..HEAD" --count 2>/dev/null || echo "?"
 }
 
-# ── Fetch both environments ───────────────────────────────────────────────────
-PROD_JSON=$(fetch_summary "$PROD_URL")
-TEST_JSON=$(fetch_summary "$TEST_URL")
+# ── Fetch both environments in parallel (max-time 10s each, but run concurrently)
+PROD_TMP=$(mktemp)
+TEST_TMP=$(mktemp)
+fetch_summary "$PROD_URL" > "$PROD_TMP" &
+fetch_summary "$TEST_URL" > "$TEST_TMP" &
+wait
+PROD_JSON=$(cat "$PROD_TMP")
+TEST_JSON=$(cat "$TEST_TMP")
+rm -f "$PROD_TMP" "$TEST_TMP"
 
 # Prod fields
 if [[ -n "$PROD_JSON" ]]; then
@@ -107,6 +113,7 @@ TEST_BACKUP_LABEL="${LAST_TEST_BACKUP:+$(basename "$LAST_TEST_BACKUP") ($(time_a
 PROD_BACKUP_LABEL="${PROD_BACKUP_LABEL:-never}"
 TEST_BACKUP_LABEL="${TEST_BACKUP_LABEL:-never}"
 BACKUP_COUNT=$(ls "${SCRIPT_DIR}/backups"/*.tar.gz 2>/dev/null | wc -l | tr -d ' ')
+BACKUP_SIZE=$(du -sh "${SCRIPT_DIR}/backups" 2>/dev/null | cut -f1 || echo "0")
 
 # ── Git info ──────────────────────────────────────────────────────────────────
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
@@ -132,7 +139,7 @@ printf "  %-18s %-26s %s\n" "Review Queue" "$PROD_QUEUE_LABEL" "$TEST_QUEUE_LABE
 echo ""
 printf "  %-18s %s\n" "Last Backup"    "prod: $PROD_BACKUP_LABEL"
 printf "  %-18s %s\n" ""               "test: $TEST_BACKUP_LABEL"
-printf "  %-18s %s\n" "Backups"        "${BACKUP_COUNT} archives"
+printf "  %-18s %s\n" "Backups"        "${BACKUP_COUNT} archives  (${BACKUP_SIZE})"
 echo ""
 printf "  %-18s %s\n" "Git Branch"     "$GIT_BRANCH"
 printf "  %-18s %s  %s  (%s)\n" "Git HEAD" "$GIT_HEAD" "$GIT_MSG" "$GIT_DATE"

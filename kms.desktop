@@ -1,9 +1,9 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Knowledge Base (Prod)
+Name=Prod Start KB
 Comment=Start the KMS production environment
-Exec=bash -c "cd /home/clinterrific/AI/knowledge-base && ./start.sh"
+Exec=bash -c "cd /home/clinterrific/AI/knowledge-base && ./start.sh; read -p 'Press Enter to close...'"
 Icon=utilities-terminal
 Terminal=true
 Categories=Utility;

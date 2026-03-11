@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=All Start KB
+Comment=Start both KMS prod and test environments
+Exec=bash -c "cd /home/clinterrific/AI/knowledge-base && ./start-all.sh; read -p 'Press Enter to close...'"
+Icon=utilities-terminal
+Terminal=true
+Categories=Utility;

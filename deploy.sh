@@ -27,8 +27,8 @@ git reset --hard origin/main
 echo ""
 echo "Step 4/4: Rebuilding and restarting production stack..."
 export APP_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-docker compose build api ui
-docker compose up -d
+docker compose --env-file .env build api ui
+docker compose --env-file .env up -d
 
 echo ""
 echo "Deployment complete. KMS prod running at http://localhost:8080/kms"

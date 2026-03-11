@@ -1,9 +1,9 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Knowledge Base (Test)
+Name=Test Start KB
 Comment=Start the KMS test environment
-Exec=bash -c "cd /home/clinterrific/AI/knowledge-base && ./start.sh --test"
+Exec=bash -c "cd /home/clinterrific/AI/knowledge-base && ./start.sh --test; read -p 'Press Enter to close...'"
 Icon=utilities-terminal
 Terminal=true
 Categories=Utility;

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=All Stop KB
+Comment=Stop both KMS prod and test environments
+Exec=bash -c "cd /home/clinterrific/AI/knowledge-base && ./stop-all.sh; read -p 'Press Enter to close...'"
+Icon=utilities-terminal
+Terminal=true
+Categories=Utility;

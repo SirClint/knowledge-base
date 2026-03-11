@@ -7,9 +7,11 @@ if [[ "$1" == "--test" ]]; then
 fi
 
 COMPOSE_FILE="docker-compose.yml"
+ENV_FILE=".env"
 PORT=8080
 if [[ "$ENV" == "test" ]]; then
   COMPOSE_FILE="docker-compose.test.yml"
+  ENV_FILE=".env.test"
   PORT=8081
 fi
 
@@ -68,7 +70,7 @@ fi
 # Start Docker stack
 echo "Starting KMS ($ENV) on port $PORT..."
 export APP_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-docker compose -f "$COMPOSE_FILE" up -d
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
 # Open browser (try common Linux methods, then macOS)
 URL="http://localhost:$PORT/kms"

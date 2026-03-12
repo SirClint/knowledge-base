@@ -40,7 +40,7 @@ async def ingest(payload: IngestPayload, session=Depends(get_session), user=Depe
         result = await ingest_message(payload.message, session)
         return result
     except ValueError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"AI processing failed: {e}")
 
 
 @router.post("/email")

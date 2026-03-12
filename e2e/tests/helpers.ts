@@ -29,6 +29,8 @@ export async function registerAndLogin(
   await page.fill('input[type="password"]', TEST_PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForURL("**/kms");
+  // Confirm we're on the home page, not redirected back to login
+  await page.waitForSelector('[placeholder="Search docs..."]', { timeout: 15000 });
 
   return { email, password: TEST_PASSWORD, role };
 }

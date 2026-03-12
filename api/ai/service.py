@@ -72,6 +72,8 @@ async def classify_ingestion_intent(message: str, candidate_paths: list[str]) ->
         "If updating, pick the most relevant existing path. "
         "If creating, choose the most appropriate folder from the available folders list and construct a slug filename. "
         "Set needs_review to true if you are unsure about the action or folder placement. "
+        "For body: reformat the full message content as clean markdown (headings, bullet points, code blocks where appropriate) "
+        "without summarizing or removing any information. "
         "Return ONLY valid JSON."
     )
     raw = await _ollama(prompt, system)

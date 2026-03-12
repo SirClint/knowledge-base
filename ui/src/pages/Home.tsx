@@ -35,7 +35,7 @@ export default function Home() {
   useEffect(() => {
     api.listDocs()
       .then((docs: DocResult[]) => setAllDocs(docs))
-      .catch(() => { localStorage.removeItem("token"); navigate("/login"); });
+      .catch(() => {});
   }, []);
 
   const folderTree = buildFolderTree(allDocs);

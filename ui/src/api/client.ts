@@ -10,7 +10,14 @@ async function request(path: string, options: RequestInit = {}) {
       ...options.headers,
     },
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const err = await res.json();
+      if (err.detail) detail = `${res.status}: ${err.detail}`;
+    } catch {}
+    throw new Error(detail);
+  }
   if (res.status === 204) return null;
   return res.json();
 }

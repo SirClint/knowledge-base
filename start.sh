@@ -76,7 +76,7 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 URL="http://localhost:$PORT/kms"
 echo "Opening $URL"
 if command -v xdg-open &>/dev/null; then
-  xdg-open "$URL" &
+  xdg-open "$URL" & disown
 elif command -v open &>/dev/null; then
   open "$URL"
 fi

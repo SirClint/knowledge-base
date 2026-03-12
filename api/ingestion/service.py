@@ -27,7 +27,7 @@ async def ingest_message(message: str, session: AsyncSession) -> dict:
     action = intent.get("action", "create")
     path = _normalize_path(intent.get("path", ""))
     title = intent.get("title", "Untitled")
-    body = intent.get("body", message)
+    body = intent.get("body") or message
     needs_review = intent.get("needs_review", False)
 
     if action == "update" and path:

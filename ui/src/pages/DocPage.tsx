@@ -11,6 +11,7 @@ export default function DocPage() {
   const navigate = useNavigate();
   const isNew = path === "new";
   const [doc, setDoc] = useState<Doc>({ title: "", body: "", path: "" });
+  const [editSnapshot, setEditSnapshot] = useState<Doc | null>(null);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   // AI ingestion state (only used when isNew)
@@ -159,7 +160,7 @@ export default function DocPage() {
     <div style={{ maxWidth: 900, margin: "40px auto", padding: 24 }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => navigate("/")}>← Back</button>
-        {!isNew && !editing && <button onClick={() => setEditing(true)}>Edit</button>}
+        {!isNew && !editing && currentRole !== "reader" && <button onClick={() => { setEditSnapshot({ ...doc }); setEditing(true); }}>Edit</button>}
         {!isNew && !editing && <button onClick={() => { const opening = !showHistory; setShowHistory(opening); if (opening) loadVersions(); }}>History</button>}
         {!isNew && !editing && currentRole === "admin" && (
           <button onClick={deleteDoc} style={{ color: "white", background: "#dc2626", border: "none", padding: "4px 10px", cursor: "pointer", borderRadius: 3 }}>
@@ -167,7 +168,7 @@ export default function DocPage() {
           </button>
         )}
         {!isNew && editing && <button onClick={save}>Save</button>}
-        {!isNew && editing && <button onClick={() => setEditing(false)}>Cancel</button>}
+        {!isNew && editing && <button onClick={() => { if (editSnapshot) setDoc(editSnapshot); setEditSnapshot(null); setEditing(false); }}>Cancel</button>}
         {!isNew && error && <span style={{ color: "red", marginLeft: 8 }}>{error}</span>}
       </div>
 
@@ -197,7 +198,7 @@ export default function DocPage() {
           </div>
 
           {tab === "ai" ? (
-            <div>
+            <div style={{ position: "relative" }}>
               <p style={{ color: "#888", fontSize: 13, marginBottom: 12 }}>
                 Paste or describe your content. AI will determine the title, folder, and whether to create or update an existing document.
               </p>
@@ -206,27 +207,46 @@ export default function DocPage() {
                   AI is currently offline. Use the Manual tab to create a document without AI.
                 </div>
               )}
-              <textarea
-                value={ingestText}
-                onChange={e => setIngestText(e.target.value)}
-                placeholder="Paste notes, content, or describe what you want to document..."
-                disabled={ingesting || aiOnline === false}
-                style={{
-                  display: "block", width: "100%", height: 300,
-                  padding: 8, fontSize: 14, boxSizing: "border-box",
-                  fontFamily: "monospace", resize: "vertical",
-                  opacity: aiOnline === false ? 0.5 : 1,
-                }}
-              />
+              <div style={{ position: "relative" }}>
+                <textarea
+                  value={ingestText}
+                  onChange={e => setIngestText(e.target.value)}
+                  placeholder="Paste notes, content, or describe what you want to document..."
+                  disabled={ingesting || aiOnline === false}
+                  style={{
+                    display: "block", width: "100%", height: 300,
+                    padding: 8, fontSize: 14, boxSizing: "border-box",
+                    fontFamily: "monospace", resize: "vertical",
+                    opacity: ingesting || aiOnline === false ? 0.4 : 1,
+                  }}
+                />
+                {ingesting && (
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center", gap: 12,
+                    background: "rgba(255,255,255,0.7)", borderRadius: 4,
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, border: "3px solid #ddd",
+                      borderTopColor: "#f59e0b", borderRadius: "50%",
+                      animation: "spin 0.8s linear infinite",
+                    }} />
+                    <div style={{ fontWeight: "bold", fontSize: 14 }}>AI is processing...</div>
+                    <div style={{ fontSize: 12, color: "#666" }}>This may take 10–30 seconds</div>
+                  </div>
+                )}
+              </div>
               {error && <div style={{ color: "red", marginTop: 8 }}>{error}</div>}
               <button
                 onClick={ingest}
                 disabled={ingesting || !ingestText.trim() || aiOnline === false}
                 title={aiOnline === false ? "AI is currently offline" : undefined}
-                style={{ marginTop: 8, opacity: aiOnline === false ? 0.5 : 1, cursor: aiOnline === false ? "not-allowed" : "pointer" }}
+                style={{ marginTop: 8, opacity: aiOnline === false ? 0.5 : 1, cursor: ingesting || aiOnline === false ? "not-allowed" : "pointer" }}
               >
-                {ingesting ? "Processing with AI..." : "Process with AI"}
+                {ingesting ? "Processing..." : "Process with AI"}
               </button>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : (
             <div>

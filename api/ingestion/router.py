@@ -37,7 +37,7 @@ def _verify_mailgun_signature(signing_key: str, timestamp: str, token: str, sign
 @router.post("")
 async def ingest(payload: IngestPayload, session=Depends(get_session), user=Depends(current_active_user)):
     try:
-        result = await ingest_message(payload.message, session)
+        result = await ingest_message(payload.message, session, owner=user.email)
         return result
     except ValueError as e:
         raise HTTPException(status_code=500, detail=f"AI processing failed: {e}")

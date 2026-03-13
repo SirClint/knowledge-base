@@ -89,7 +89,7 @@ test.describe("AI Ingestion", () => {
     await page.fill("textarea", "Some content that will fail");
     await page.click("button:has-text('Process with AI')");
 
-    await expect(page.locator("text=/AI processing failed/")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=/server encountered an error/")).toBeVisible({ timeout: 10000 });
     await expect(page).toHaveURL(/\/kms\/doc\/new/);
     await expect(page.locator("textarea")).toBeEnabled();
     await expect(page.locator("button:has-text('Process with AI')")).toBeVisible();

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { api, BASE } from "../api/client";
+import { api, BASE, friendlyError } from "../api/client";
 import DocViewer from "../components/DocViewer";
 import Editor from "../components/Editor";
 
@@ -44,7 +44,7 @@ export default function DocPage() {
 
   useEffect(() => {
     if (!isNew && path) {
-      api.getDoc(path).then(setDoc).catch(() => setError("Document not found"));
+      api.getDoc(path).then(setDoc).catch(() => setError("Document not found — it may have been deleted or moved. If unexpected, contact IT support."));
       // Inline to avoid stale-closure dep warning; loadComments() still used by handlers
       api.listComments(path).then(setComments).catch(() => {});
     }
@@ -63,7 +63,7 @@ export default function DocPage() {
       await api.deleteDoc(path!);
       navigate("/");
     } catch (e: any) {
-      setError(e.message ?? "Delete failed");
+      setError(friendlyError(e));
     }
   }
 
@@ -73,11 +73,7 @@ export default function DocPage() {
       await api.updateDoc(path!, { title: doc.title, body: doc.body });
       setEditing(false);
     } catch (e: any) {
-      if (e.message?.includes("403")) {
-        setError("Permission denied. Your account needs the editor or admin role to save documents.");
-      } else {
-        setError(e.message ?? "Save failed");
-      }
+      setError(friendlyError(e));
     }
   }
 
@@ -89,7 +85,7 @@ export default function DocPage() {
       const result = await api.ingest(ingestText);
       navigate(`/doc/${result.path}`);
     } catch (e: any) {
-      setError(e.message ?? "Processing failed");
+      setError(friendlyError(e));
       setIngesting(false);
     }
   }
@@ -117,7 +113,7 @@ export default function DocPage() {
       setShowHistory(false);
       setVersions([]);
     } catch (e: any) {
-      setError(e.message ?? "Restore failed");
+      setError(friendlyError(e));
     }
   }
 
@@ -130,7 +126,7 @@ export default function DocPage() {
       await api.createDoc({ title: manualTitle.trim(), body: "", path, tags: [] });
       navigate(`/doc/${path}`);
     } catch (e: any) {
-      setError(e.message ?? "Create failed");
+      setError(friendlyError(e));
     }
   }
 
@@ -142,7 +138,7 @@ export default function DocPage() {
       setNewComment("");
       loadComments();
     } catch (e: any) {
-      setCommentError(e.message ?? "Failed to add comment");
+      setCommentError(friendlyError(e));
     }
   }
 
@@ -152,7 +148,7 @@ export default function DocPage() {
       await api.deleteComment(id);
       loadComments();
     } catch (e: any) {
-      setCommentError(e.message ?? "Failed to delete comment");
+      setCommentError(friendlyError(e));
     }
   }
 

@@ -31,5 +31,13 @@ Thumbs.db
 .obsidian/workspace-mobile.json
 
 vault-test/*
-!vault-test/.gitkeep
+!vault-test/personal/
+!vault-test/personal/.gitkeep
+!vault-test/team/
+!vault-test/team/processes/
+!vault-test/team/processes/.gitkeep
+!vault-test/team/systems/
+!vault-test/team/systems/.gitkeep
+!vault-test/team/projects/
+!vault-test/team/projects/.gitkeep
 backups/*.tar.gz

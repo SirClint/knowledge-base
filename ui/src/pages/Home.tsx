@@ -5,12 +5,23 @@ import SearchBar from "../components/SearchBar";
 
 interface DocResult { id: number; path: string; title: string; }
 
-/** Derive a nested folder tree from flat doc paths.
+/** Derive a nested folder tree from known folder paths and flat doc paths.
+ *  Known folders are always shown even when empty.
  *  e.g. ["personal/a.md", "team/processes/b.md"]
  *  → { personal: {}, team: { processes: {} } }
  */
-function buildFolderTree(docs: DocResult[]): Record<string, Record<string, object>> {
+function buildFolderTree(docs: DocResult[], knownFolders: string[]): Record<string, Record<string, object>> {
   const tree: Record<string, Record<string, object>> = {};
+
+  // Seed with known folders so they always appear
+  for (const folder of knownFolders) {
+    const parts = folder.split("/");
+    const [top, sub] = parts;
+    if (!tree[top]) tree[top] = {};
+    if (sub) (tree[top] as Record<string, object>)[sub] = {};
+  }
+
+  // Add any additional folders found in docs
   for (const doc of docs) {
     const parts = doc.path.split("/");
     if (parts.length < 2) continue;
@@ -26,6 +37,7 @@ function buildFolderTree(docs: DocResult[]): Record<string, Record<string, objec
 
 export default function Home() {
   const [allDocs, setAllDocs] = useState<DocResult[]>([]);
+  const [knownFolders, setKnownFolders] = useState<string[]>([]);
   const [results, setResults] = useState<DocResult[]>([]);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -36,9 +48,17 @@ export default function Home() {
     api.listDocs()
       .then((docs: DocResult[]) => setAllDocs(docs))
       .catch(() => {});
+    api.getFolders()
+      .then((folders: string[]) => {
+        setKnownFolders(folders);
+        // Default-expand top-level folders
+        const tops = [...new Set(folders.map(f => f.split("/")[0]))];
+        setExpanded(prev => Object.fromEntries(tops.map(t => [t, prev[t] ?? true])));
+      })
+      .catch(() => {});
   }, []);
 
-  const folderTree = buildFolderTree(allDocs);
+  const folderTree = buildFolderTree(allDocs, knownFolders);
 
   function handleFolderClick(folderPath: string) {
     setActiveFolder(folderPath);

@@ -8,12 +8,15 @@ const ROOT = path.resolve(__dirname, "..");
  *
  * Performs SURGICAL cleanup: only removes data flagged as Playwright-owned.
  *
- * The flag is the email prefix "playwright-" on "@example.com":
- *   - All Playwright test users are registered as playwright-<timestamp>-<rand>@example.com (see helpers.ts).
- *   - All docs created by those users (via UI or AI ingestion) have owner set
- *     to the user's email, so they are identifiable by the same prefix.
+ * Two cleanup passes:
+ *   1. playwright-*@example.com users and all docs they own.
+ *      All Playwright test users are registered as playwright-<timestamp>-<rand>@example.com (see helpers.ts).
+ *      All docs created by those users have owner set to their email, so they are identifiable.
+ *   2. Docs with a blank owner — these are orphaned records that cannot be attributed to any real
+ *      user. They should not exist in a correctly running system; cleaning them prevents test
+ *      residue from accumulating if owner tracking ever regresses.
  *
- * Real user accounts and manually-preserved test data are untouched.
+ * Real user accounts (non-playwright-*, non-blank owner) are never touched.
  */
 export default async function globalSetup() {
   console.log("\n[globalSetup] Cleaning up Playwright test data (playwright-*@example.com)...");
@@ -28,40 +31,50 @@ from sqlalchemy import select, delete
 
 async def reset():
     async with async_session_maker() as session:
-        # Find all Playwright test users (identified by playwright- prefix on @example.com)
+        # Pass 1: playwright-*@example.com users and their docs
         result = await session.execute(
             select(User.email).where(User.email.like('playwright-%@example.com'))
         )
         test_emails = [r[0] for r in result.fetchall()]
 
-        if not test_emails:
-            print('[globalSetup] No Playwright test users found (playwright-*@example.com) — nothing to clean up.')
-            return
+        owned_paths = []
+        if test_emails:
+            result = await session.execute(
+                select(Document.path).where(Document.owner.in_(test_emails))
+            )
+            owned_paths = [r[0] for r in result.fetchall()]
 
-        # Find all docs owned by those users
+        # Pass 2: docs with blank owner (orphaned — no real user can claim them)
         result = await session.execute(
-            select(Document.path).where(Document.owner.in_(test_emails))
+            select(Document.path).where(Document.owner == '')
         )
-        test_paths = [r[0] for r in result.fetchall()]
+        blank_paths = [r[0] for r in result.fetchall()]
 
-        # Delete vault files for those docs
+        all_paths = list(set(owned_paths + blank_paths))
+
+        # Delete vault files
         vault = Path('/vault')
-        for doc_path in test_paths:
+        for doc_path in all_paths:
             f = vault / doc_path
             if f.exists():
                 f.unlink()
 
-        # Delete DB records owned by Playwright test users (cascade order)
-        if test_paths:
-            await session.execute(delete(Comment).where(Comment.doc_path.in_(test_paths)))
-            await session.execute(delete(DocVersion).where(DocVersion.doc_path.in_(test_paths)))
+        # Delete DB records (cascade order)
+        if all_paths:
+            await session.execute(delete(Comment).where(Comment.doc_path.in_(all_paths)))
+            await session.execute(delete(DocVersion).where(DocVersion.doc_path.in_(all_paths)))
+        if owned_paths:
             await session.execute(delete(Document).where(Document.owner.in_(test_emails)))
+        if blank_paths:
+            await session.execute(delete(Document).where(Document.owner == ''))
 
         # Delete the test users themselves
-        await session.execute(delete(User).where(User.email.like('playwright-%@example.com')))
+        if test_emails:
+            await session.execute(delete(User).where(User.email.like('playwright-%@example.com')))
+
         await session.commit()
 
-        print(f'[globalSetup] Removed {len(test_emails)} test user(s) and {len(test_paths)} test doc(s).')
+        print(f'[globalSetup] Removed {len(test_emails)} test user(s), {len(owned_paths)} owned doc(s), {len(blank_paths)} orphaned doc(s).')
 
 asyncio.run(reset())
 `.trim();

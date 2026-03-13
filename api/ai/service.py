@@ -56,7 +56,7 @@ async def check_staleness(body: str) -> dict:
     return json.loads(raw)
 
 
-KNOWN_FOLDERS = ["personal", "team/processes", "team/architecture", "team/projects"]
+KNOWN_FOLDERS = ["personal", "team/processes", "team/systems", "team/projects"]
 
 
 async def classify_ingestion_intent(message: str, candidate_paths: list[str]) -> dict:

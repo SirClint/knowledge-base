@@ -72,9 +72,14 @@ echo "Starting KMS ($ENV) on port $PORT..."
 export APP_VERSION=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
-# Open browser (try common Linux methods, then macOS)
+# Countdown then open browser
 URL="http://localhost:$PORT/kms"
-echo "Opening $URL"
+echo ""
+for i in 5 4 3 2 1; do
+  printf "\rLaunching browser in %s...  " "$i"
+  sleep 1
+done
+printf "\rOpening %s          \n" "$URL"
 if command -v xdg-open &>/dev/null; then
   xdg-open "$URL" & disown
 elif command -v open &>/dev/null; then

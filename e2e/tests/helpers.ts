@@ -2,7 +2,7 @@ import { Page } from "@playwright/test";
 
 /** Generate a unique email for test isolation */
 export function uniqueEmail(): string {
-  return `test-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`;
+  return `playwright-${Date.now()}-${Math.random().toString(36).slice(2, 6)}@example.com`;
 }
 
 const TEST_PASSWORD = "testpassword123";

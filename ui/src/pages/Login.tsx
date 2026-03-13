@@ -15,10 +15,10 @@ export default function Login() {
       if (data.access_token) {
         navigate("/");
       } else {
-        setError("Invalid credentials");
+        setError("Invalid email or password — please try again. If you've forgotten your password, contact an admin. If the problem persists, contact IT support.");
       }
     } catch {
-      setError("Login failed");
+      setError("Could not reach the server. Check your network connection and try again. If the problem persists, contact IT support.");
     }
   }
 

@@ -1,8 +1,27 @@
 # Knowledge Management System (KMS)
 
+## ⚠ CRITICAL: Development Workflow
+
+**ALL development work targets the TEST environment. NEVER build or restart prod containers directly.**
+
+```
+Fix code → build/test against TEST → commit to branch → PR → merge to main → ./deploy.sh
+```
+
+| Action | Correct command |
+|--------|----------------|
+| Build after code change | `make build-ui` or `make build-api` |
+| Run backend tests | `make pytest` |
+| Run E2E tests | `make e2e` |
+| Deploy to production | `./deploy.sh` (only, after merging to main) |
+
+**Never run bare `docker compose build/up` — it targets prod. Use `make` targets or `docker compose -f docker-compose.test.yml --env-file .env.test ...` for all dev work.**
+
+---
+
 ## What This Is
 Self-hosted knowledge base with AI-powered search, staleness detection, review queue, version history, comments, and email ingestion.
-Access at **http://localhost:8080/kms** when running.
+Access at **http://localhost:8080/kms** when running (prod) or **http://localhost:8081/kms** (test).
 
 ## Architecture
 
@@ -79,24 +98,29 @@ caddy:8080 → /kms/api/* → api:8000 (FastAPI)
 
 ```bash
 # Start/stop
-./start.sh                    # Start prod (Ollama + stack + browser)
-./start.sh --test             # Start test environment
+./start.sh --test             # Start test environment  ← use this for development
+./stop.sh --test              # Stop test environment
+./start.sh                    # Start prod (only after deploy.sh)
 ./stop.sh                     # Stop prod
-./stop.sh --test              # Stop test
 
-# Deploy
+# Deploy (prod only, after merging to main)
 ./backup.sh --env prod        # Manual backup (ALWAYS run before destructive actions)
 ./deploy-test.sh              # Deploy current branch to test (practice run)
 ./deploy.sh                   # Deploy main to prod (includes auto-backup)
 
-# Development
-docker compose exec api pytest -v          # Backend tests
-cd e2e && npx playwright test              # E2E tests (prod must be running)
-docker compose build api ui && docker compose up -d  # Rebuild after code changes
-docker compose logs api --tail 30          # Debug API
+# Development — all targets operate on TEST environment
+make build-ui                 # Rebuild UI after frontend changes
+make build-api                # Rebuild API after backend changes
+make build                    # Rebuild all services
+make pytest                   # Run backend tests (test env)
+make e2e                      # Run E2E tests (test env)
+make logs-api                 # Tail API logs (test env)
 
-# Test environment
-docker compose -f docker-compose.test.yml exec api pytest -v   # Backend tests against test
+# Raw test-env docker commands (if not using make)
+docker compose -f docker-compose.test.yml --env-file .env.test build ui
+docker compose -f docker-compose.test.yml --env-file .env.test up -d ui
+docker compose -f docker-compose.test.yml --env-file .env.test exec api pytest -v
+docker compose -f docker-compose.test.yml --env-file .env.test logs api --tail 30
 ```
 
 ## Known Issues & Gotchas

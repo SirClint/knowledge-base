@@ -9,10 +9,25 @@ import Layout from "./components/Layout";
 
 const isTest = window.location.port === "8081";
 
+function isTokenValid(token: string | null): boolean {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return typeof payload.exp === "number" && payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  return localStorage.getItem("token")
-    ? <Layout>{children}</Layout>
-    : <Navigate to="/login" />;
+  const token = localStorage.getItem("token");
+  if (!isTokenValid(token)) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("email");
+    return <Navigate to="/login" />;
+  }
+  return <Layout>{children}</Layout>;
 }
 
 export default function App() {

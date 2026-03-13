@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { api, friendlyError } from "../api/client";
 
 interface User { id: string; email: string; role: string; is_active: boolean; }
 
@@ -28,11 +28,7 @@ export default function UsersPage() {
       const data = await api.listUsers();
       setUsers(data);
     } catch (e: any) {
-      if (e.message?.includes("403")) {
-        setError("Access denied — your session may be outdated. Please log out and log back in.");
-      } else {
-        setError("Failed to load users");
-      }
+      setError(friendlyError(e));
     }
   }
 
@@ -43,7 +39,7 @@ export default function UsersPage() {
       setMessage("Role updated.");
       load();
     } catch (e: any) {
-      setError(e.message ?? "Failed to update role");
+      setError(friendlyError(e));
     }
   }
 
@@ -56,7 +52,7 @@ export default function UsersPage() {
       await api.resetPassword(id, pw);
       setMessage(`Password reset for ${email}.`);
     } catch (e: any) {
-      setError(e.message ?? "Failed to reset password");
+      setError(friendlyError(e));
     }
   }
 
@@ -68,7 +64,7 @@ export default function UsersPage() {
       setMessage(`Deleted ${email}.`);
       load();
     } catch (e: any) {
-      setError(e.message ?? "Failed to delete user");
+      setError(friendlyError(e));
     }
   }
 

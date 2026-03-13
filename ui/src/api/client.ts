@@ -1,5 +1,28 @@
 export const BASE = import.meta.env.VITE_API_URL ?? "/kms/api";
 
+export function friendlyError(e: any): string {
+  const msg: string = e?.message ?? String(e ?? "");
+  if (msg.includes("401")) {
+    return "Your session has expired — please log in again. If the problem persists, contact IT support.";
+  }
+  if (msg.includes("403")) {
+    return "You don't have permission for this action. Contact an admin to adjust your role. If the problem persists, contact IT support.";
+  }
+  if (msg.includes("404")) {
+    return "Item not found — it may have been deleted or moved. If unexpected, contact IT support.";
+  }
+  if (msg.includes("500")) {
+    return "The server encountered an error. Try again in a moment. If the problem persists, contact IT support.";
+  }
+  if (/failed to fetch|networkerror|network error/i.test(msg)) {
+    return "Could not reach the server. Check your network connection and try again. If the problem persists, contact IT support.";
+  }
+  if (msg) {
+    return `${msg} — if the problem persists, contact IT support.`;
+  }
+  return "An unexpected error occurred. Try again. If the problem persists, contact IT support.";
+}
+
 async function request(path: string, options: RequestInit = {}) {
   const token = localStorage.getItem("token");
   const res = await fetch(`${BASE}${path}`, {
@@ -11,6 +34,12 @@ async function request(path: string, options: RequestInit = {}) {
     },
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("role");
+      localStorage.removeItem("email");
+      window.location.replace("/kms/login");
+    }
     let detail = `${res.status} ${res.statusText}`;
     try {
       const err = await res.json();

@@ -30,9 +30,8 @@ test.describe("Authentication", () => {
     await page.fill('input[type="password"]', "wrongpassword");
     await page.click('button[type="submit"]');
 
-    // Should stay on login page and show error
-    // UI shows either "Invalid credentials" or "Login failed"
-    await expect(page.locator("text=/Invalid credentials|Login failed/")).toBeVisible();
+    // Should stay on login page and show error with next-action guidance
+    await expect(page.locator("text=/Invalid email or password|Could not reach the server/")).toBeVisible();
   });
 
   test("logout clears session and redirects to login", async ({ page }) => {

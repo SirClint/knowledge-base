@@ -27,9 +27,10 @@ class DocUpdate(BaseModel):
     status: str | None = None
 
 
-@router.post("", status_code=201, dependencies=[Depends(require_editor)])
-async def create(payload: DocCreate, session=Depends(get_session)):
-    doc = await create_doc(payload.path, payload.title, payload.body, payload.tags, payload.owner, session)
+@router.post("", status_code=201)
+async def create(payload: DocCreate, session=Depends(get_session), user=Depends(require_editor)):
+    owner = payload.owner or user.email
+    doc = await create_doc(payload.path, payload.title, payload.body, payload.tags, owner, session)
     return {"id": doc.id, "title": doc.title, "path": doc.path}
 
 

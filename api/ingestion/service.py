@@ -18,7 +18,7 @@ def _normalize_path(path: str) -> str:
     return path
 
 
-async def ingest_message(message: str, session: AsyncSession) -> dict:
+async def ingest_message(message: str, session: AsyncSession, owner: str = "") -> dict:
     # Get existing doc paths for context
     result = await session.execute(select(Document.path))
     paths = [r[0] for r in result.fetchall()]
@@ -29,6 +29,12 @@ async def ingest_message(message: str, session: AsyncSession) -> dict:
     title = intent.get("title", "Untitled")
     body = intent.get("body") or message
     needs_review = intent.get("needs_review", False)
+
+    # Strip leading heading if AI echoed the title as the first line (e.g. "# My Title\n...")
+    # to avoid the title appearing twice in the rendered view.
+    body_lines = body.strip().splitlines()
+    if body_lines and body_lines[0].lstrip("#").strip().lower() == title.strip().lower():
+        body = "\n".join(body_lines[1:]).lstrip("\n")
 
     if action == "update" and path:
         doc = await update_doc(path, {"title": title, "body": body}, session, saved_by="ingestion")
@@ -41,7 +47,7 @@ async def ingest_message(message: str, session: AsyncSession) -> dict:
             slug = title.lower().replace(" ", "-")[:40]
             path = f"personal/{slug}.md"
         try:
-            doc = await create_doc(path, title, body, [], "", session)
+            doc = await create_doc(path, title, body, [], owner, session)
         except IntegrityError:
             # Path already exists — update instead
             await session.rollback()

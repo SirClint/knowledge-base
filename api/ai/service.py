@@ -14,6 +14,14 @@ SYSTEM_STALE = (
     "tool names, or procedures that may be outdated. Return ONLY valid JSON."
 )
 
+SYSTEM_MERGE = (
+    "You are a document editor. You will be given an existing document and new information. "
+    "Produce a single, well-structured markdown document that incorporates all content from both. "
+    "Preserve existing sections and expand them or add new sections for new topics. "
+    "Do not repeat information that already appears in the existing document. "
+    "Do not include YAML frontmatter. Return ONLY the markdown body."
+)
+
 
 def _extract_json(text: str) -> str:
     """Extract the first JSON object or array from a model response.
@@ -37,12 +45,29 @@ def _extract_json(text: str) -> str:
 
 
 async def _ollama(prompt: str, system: str) -> str:
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(
-            f"{settings.ollama_url}/api/generate",
-            json={"model": "llama3.2", "prompt": prompt, "system": system, "stream": False},
-        )
-        return _extract_json(r.json()["response"])
+    """Call Ollama and return the JSON-extracted response."""
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                f"{settings.ollama_url}/api/generate",
+                json={"model": "llama3.2", "prompt": prompt, "system": system, "stream": False},
+            )
+            return _extract_json(r.json()["response"])
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        raise RuntimeError(f"AI service is unreachable: {e}") from e
+
+
+async def _ollama_raw(prompt: str, system: str) -> str:
+    """Call Ollama and return the raw text response (no JSON extraction)."""
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(
+                f"{settings.ollama_url}/api/generate",
+                json={"model": "llama3.2", "prompt": prompt, "system": system, "stream": False},
+            )
+            return r.json()["response"].strip()
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        raise RuntimeError(f"AI service is unreachable: {e}") from e
 
 
 async def suggest_tags(body: str, existing_tags: list[str]) -> list[str]:
@@ -56,24 +81,38 @@ async def check_staleness(body: str) -> dict:
     return json.loads(raw)
 
 
+async def merge_doc_content(existing_body: str, new_message: str) -> str:
+    """Merge new information into an existing document body, returning updated markdown."""
+    prompt = (
+        f"Existing document:\n{existing_body[:3000]}\n\n"
+        f"New information to incorporate:\n{new_message[:1000]}"
+    )
+    return await _ollama_raw(prompt, SYSTEM_MERGE)
+
+
 KNOWN_FOLDERS = ["personal", "team/processes", "team/systems", "team/projects"]
 
 
-async def classify_ingestion_intent(message: str, candidate_paths: list[str]) -> dict:
-    paths_block = "\n".join(candidate_paths[:20])
+async def classify_ingestion_intent(message: str, candidate_docs: list[dict]) -> dict:
+    # Format as "Title → path" so the AI can match by topic, not just filename slug
+    docs_block = "\n".join(
+        f"{d.get('title') or d.get('path')} → {d['path']}"
+        for d in candidate_docs[:100]
+    )
     prompt = (
         f"Message: {message}\n\n"
-        f"Existing doc paths:\n{paths_block}\n\n"
+        f"Existing documents:\n{docs_block}\n\n"
         f"Available folders: {', '.join(KNOWN_FOLDERS)}"
     )
     system = (
         "Return JSON: {\"action\": \"create\"|\"update\", \"path\": string|null, "
         "\"title\": string, \"body\": string, \"needs_review\": boolean}. "
-        "If updating, pick the most relevant existing path. "
+        "IMPORTANT: If ANY existing document covers the same or a closely related topic as the "
+        "message, you MUST set action='update' and use that document's path. "
+        "Only set action='create' if NO existing document is on the same topic. "
         "If creating, choose the most appropriate folder from the available folders list and construct a slug filename. "
-        "Set needs_review to true if you are unsure about the action or folder placement. "
-        "For body: reformat the full message content as clean markdown (headings, bullet points, code blocks where appropriate) "
-        "without summarizing or removing any information. "
+        "For body: reformat the message content as clean markdown. "
+        "Set needs_review=true if you cannot confidently determine whether to update or create. "
         "Return ONLY valid JSON."
     )
     raw = await _ollama(prompt, system)

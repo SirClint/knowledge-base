@@ -80,8 +80,11 @@ for i in 5 4 3 2 1; do
   sleep 1
 done
 printf "\rOpening %s          \n" "$URL"
+# Use setsid to launch browser in a new session, fully detached from this
+# terminal's controlling TTY. Without this, closing the terminal window sends
+# SIGHUP to the browser even after "disown" because they share the same session.
 if command -v xdg-open &>/dev/null; then
-  xdg-open "$URL" & disown
+  setsid xdg-open "$URL" &>/dev/null &
 elif command -v open &>/dev/null; then
   open "$URL"
 fi

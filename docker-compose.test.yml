@@ -32,8 +32,3 @@ volumes:
   kb_data_test:
   caddy_data_test:
 
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 172.19.0.0/16

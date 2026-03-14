@@ -1,4 +1,5 @@
 import pytest
+import httpx
 from unittest.mock import AsyncMock, patch
 
 
@@ -30,7 +31,7 @@ async def test_classify_ingestion_returns_needs_review():
             json=lambda: {"response": '{"action": "create", "path": "personal/vague-note.md", "title": "Vague Note", "body": "Some content.", "needs_review": true}'}
         ))
         from ai.service import classify_ingestion_intent
-        result = await classify_ingestion_intent("something vague", candidate_paths=[])
+        result = await classify_ingestion_intent("something vague", candidate_docs=[])
         assert result["needs_review"] is True
         assert "action" in result
         assert "path" in result
@@ -46,9 +47,59 @@ async def test_classify_ingestion_includes_known_folders_in_prompt():
     with patch("ai.service.httpx.AsyncClient") as mock:
         mock.return_value.__aenter__.return_value.post = fake_post
         from ai.service import classify_ingestion_intent
-        await classify_ingestion_intent("architecture doc", candidate_paths=["personal/existing.md"])
+        await classify_ingestion_intent("architecture doc", candidate_docs=[{"path": "personal/existing.md", "title": "Existing Doc"}])
         prompt = captured["payload"]["prompt"]
-        assert "Existing doc paths:" in prompt
+        assert "Existing documents:" in prompt
         assert "Available folders:" in prompt
-        assert prompt.index("Existing doc paths:") < prompt.index("Available folders:")
-        assert "team/architecture" in prompt
+        assert prompt.index("Existing documents:") < prompt.index("Available folders:")
+        assert "team/processes" in prompt  # from KNOWN_FOLDERS in Available folders line
+
+
+async def test_classify_ingestion_prompt_includes_doc_titles():
+    """Titles must reach the AI prompt — paths alone are insufficient for topic matching."""
+    captured = {}
+
+    async def fake_post(url, json=None, **kwargs):
+        captured["payload"] = json
+        return AsyncMock(json=lambda: {"response": '{"action": "update", "path": "personal/pi.md", "title": "Pi", "body": "More pi info.", "needs_review": false}'})
+
+    with patch("ai.service.httpx.AsyncClient") as mock:
+        mock.return_value.__aenter__.return_value.post = fake_post
+        from ai.service import classify_ingestion_intent
+        await classify_ingestion_intent(
+            "Here is more information about pi",
+            candidate_docs=[{"path": "personal/pi.md", "title": "Pi - Mathematical Constant"}],
+        )
+        prompt = captured["payload"]["prompt"]
+        # The human-readable title must appear in the prompt so the AI can
+        # match by topic rather than guessing from a slugified filename.
+        assert "Pi - Mathematical Constant" in prompt
+        assert "personal/pi.md" in prompt
+
+
+async def test_merge_doc_content():
+    """merge_doc_content should return the raw AI response (not JSON-extracted)."""
+    with patch("ai.service.httpx.AsyncClient") as mock:
+        mock.return_value.__aenter__.return_value.post = AsyncMock(return_value=AsyncMock(
+            json=lambda: {"response": "# Pi\n\nPi equals 3.14159.\n\nPi is also transcendental."}
+        ))
+        from ai.service import merge_doc_content
+        result = await merge_doc_content(
+            existing_body="Pi equals 3.14159.",
+            new_message="Pi is also a transcendental number.",
+        )
+        assert "3.14159" in result
+        assert "transcendental" in result
+
+
+async def test_ollama_connect_error_raises_runtime_error():
+    """Network errors from Ollama must become RuntimeError, not propagate as raw httpx
+    exceptions.  The ingestion router catches RuntimeError and returns 503 so the
+    user sees a clear 'AI unavailable' message instead of a generic 500."""
+    with patch("ai.service.httpx.AsyncClient") as mock:
+        mock.return_value.__aenter__.return_value.post = AsyncMock(
+            side_effect=httpx.ConnectError("All connection attempts failed")
+        )
+        from ai.service import classify_ingestion_intent
+        with pytest.raises(RuntimeError, match="AI service is unreachable"):
+            await classify_ingestion_intent("test", candidate_docs=[])

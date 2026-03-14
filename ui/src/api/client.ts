@@ -11,6 +11,9 @@ export function friendlyError(e: any): string {
   if (msg.includes("404")) {
     return "Item not found — it may have been deleted or moved. If unexpected, contact IT support.";
   }
+  if (msg.includes("503")) {
+    return "The AI service is currently unavailable. Check that Ollama is running and try again.";
+  }
   if (msg.includes("500")) {
     return "The server encountered an error. Try again in a moment. If the problem persists, contact IT support.";
   }

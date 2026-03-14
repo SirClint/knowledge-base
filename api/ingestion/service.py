@@ -1,9 +1,12 @@
+from pathlib import Path
+import frontmatter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from db.models import Document
-from ai.service import classify_ingestion_intent
+from ai.service import classify_ingestion_intent, merge_doc_content
 from docs_.service import create_doc, update_doc
+from config import settings
 
 
 def _normalize_path(path: str) -> str:
@@ -18,12 +21,40 @@ def _normalize_path(path: str) -> str:
     return path
 
 
-async def ingest_message(message: str, session: AsyncSession, owner: str = "") -> dict:
-    # Get existing doc paths for context
-    result = await session.execute(select(Document.path))
-    paths = [r[0] for r in result.fetchall()]
+def _read_vault_body(path: str) -> str | None:
+    """Read the markdown body of an existing vault file.
 
-    intent = await classify_ingestion_intent(message, paths)
+    Returns None if the file does not exist, so callers can fall back to the
+    AI-generated body rather than failing.
+    """
+    vault_file = Path(settings.vault_path) / path
+    if not vault_file.exists():
+        return None
+    post = frontmatter.load(str(vault_file))
+    return post.content
+
+
+async def _update_with_merge(path: str, title: str, message: str, fallback_body: str,
+                              session: AsyncSession) -> Document | None:
+    """Update an existing doc, merging the new message into its current content.
+
+    If the vault file is present, calls the AI to produce a merged document body.
+    Falls back to fallback_body (AI-reformatted new message) if the file is missing.
+    """
+    existing_body = _read_vault_body(path)
+    if existing_body is not None:
+        merged = await merge_doc_content(existing_body, message)
+    else:
+        merged = fallback_body
+    return await update_doc(path, {"title": title, "body": merged}, session, saved_by="ingestion")
+
+
+async def ingest_message(message: str, session: AsyncSession, owner: str = "") -> dict:
+    # Get existing doc titles + paths for context so the AI can match by topic
+    result = await session.execute(select(Document.path, Document.title))
+    candidate_docs = [{"path": r[0], "title": r[1]} for r in result.fetchall()]
+
+    intent = await classify_ingestion_intent(message, candidate_docs)
     action = intent.get("action", "create")
     path = _normalize_path(intent.get("path", ""))
     title = intent.get("title", "Untitled")
@@ -36,8 +67,14 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
     if body_lines and body_lines[0].lstrip("#").strip().lower() == title.strip().lower():
         body = "\n".join(body_lines[1:]).lstrip("\n")
 
+    # Guard: if the AI says update but returned a path that isn't in the existing docs,
+    # it hallucinated — fall through to create so content isn't silently discarded.
+    candidate_paths = {d["path"] for d in candidate_docs}
+    if action == "update" and path and path not in candidate_paths:
+        action = "create"
+
     if action == "update" and path:
-        doc = await update_doc(path, {"title": title, "body": body}, session, saved_by="ingestion")
+        doc = await _update_with_merge(path, title, message, body, session)
         if needs_review and doc:
             doc.status = "needs_review"
             await session.commit()
@@ -49,9 +86,9 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
         try:
             doc = await create_doc(path, title, body, [], owner, session)
         except IntegrityError:
-            # Path already exists — update instead
+            # Path already exists — merge new content into it instead of creating a duplicate
             await session.rollback()
-            doc = await update_doc(path, {"title": title, "body": body}, session, saved_by="ingestion")
+            doc = await _update_with_merge(path, title, message, body, session)
             action = "update"
         if needs_review and doc:
             doc.status = "needs_review"

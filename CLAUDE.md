@@ -136,6 +136,7 @@ docker compose -f docker-compose.test.yml --env-file .env.test logs api --tail 3
 - **JWT lifetime** — 1 hour, no refresh tokens
 - **UI uses inline styles** — no CSS framework
 - **Ollama UFW rule** — one-time setup: `sudo ufw allow from 172.18.0.0/16 to any port 11434`. Subnet-based so it survives Docker network recreates permanently.
+- **Browser launch in `start.sh` must use `setsid`** — `xdg-open` is called with `setsid xdg-open "$URL" &>/dev/null &`. Without `setsid`, closing the terminal window sends SIGHUP through the shared session to the browser, killing it. Do not replace `setsid` with `& disown` — `disown` only removes the job from bash's table but does not change the process session, so SIGHUP from terminal close still reaches the browser.
 - **`body_preview` not updated on save** — DB preview field only set at create time; stale after edits
 - **Mailgun requires public URL** — email ingestion only works if host is reachable from internet (use ngrok for local testing)
 

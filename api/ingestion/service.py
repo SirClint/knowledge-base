@@ -57,7 +57,7 @@ def _scan_vault_subfolders() -> list[str]:
         root_path = vault / root
         if root_path.is_dir():
             for child in sorted(root_path.iterdir()):
-                if child.is_dir():
+                if child.is_dir() and not child.name.startswith("."):
                     subfolders.append(f"{root}/{child.name}")
     return subfolders
 

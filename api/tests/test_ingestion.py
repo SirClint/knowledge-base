@@ -46,6 +46,7 @@ async def test_ingest_updates_existing_doc():
                         session=_mock_session(existing_docs=[("team/processes/deploy.md", "Deploy Process")]),
                     )
                     assert result["action"] == "update"
+                    assert "reason" in result
 
 
 async def test_ingest_sets_needs_review_status_on_create():

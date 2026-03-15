@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from db.models import Document
-from ai.service import classify_ingestion_intent, merge_doc_content
+from ai.service import classify_ingestion_intent, merge_doc_content, ROOT_FOLDERS
 from docs_.service import create_doc, update_doc
 from config import settings
 
@@ -49,17 +49,32 @@ async def _update_with_merge(path: str, title: str, message: str, fallback_body:
     return await update_doc(path, {"title": title, "body": merged}, session, saved_by="ingestion")
 
 
+def _scan_vault_subfolders() -> list[str]:
+    """Scan vault for existing subfolders under each root folder."""
+    vault = Path(settings.vault_path)
+    subfolders = []
+    for root in ROOT_FOLDERS:
+        root_path = vault / root
+        if root_path.is_dir():
+            for child in sorted(root_path.iterdir()):
+                if child.is_dir():
+                    subfolders.append(f"{root}/{child.name}")
+    return subfolders
+
+
 async def ingest_message(message: str, session: AsyncSession, owner: str = "") -> dict:
     # Get existing doc titles + paths for context so the AI can match by topic
     result = await session.execute(select(Document.path, Document.title))
     candidate_docs = [{"path": r[0], "title": r[1]} for r in result.fetchall()]
 
-    intent = await classify_ingestion_intent(message, candidate_docs)
+    known_subfolders = _scan_vault_subfolders()
+    intent = await classify_ingestion_intent(message, candidate_docs, known_subfolders=known_subfolders)
     action = intent.get("action", "create")
     path = _normalize_path(intent.get("path", ""))
     title = intent.get("title", "Untitled")
     body = intent.get("body") or message
     needs_review = intent.get("needs_review", False)
+    reason = intent.get("reason", "")
 
     # Strip leading heading if AI echoed the title as the first line (e.g. "# My Title\n...")
     # to avoid the title appearing twice in the rendered view.
@@ -78,7 +93,7 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
         if needs_review and doc:
             doc.status = "needs_review"
             await session.commit()
-        return {"action": "update", "path": path, "needs_review": needs_review, "message": f"Updated doc: {title}."}
+        return {"action": "update", "path": path, "needs_review": needs_review, "reason": reason, "message": f"Updated doc: {title}."}
     else:
         if not path:
             slug = title.lower().replace(" ", "-")[:40]
@@ -93,4 +108,4 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
         if needs_review and doc:
             doc.status = "needs_review"
             await session.commit()
-        return {"action": action, "path": path, "needs_review": needs_review, "message": f"{'Updated' if action == 'update' else 'Created'} doc: {title}."}
+        return {"action": action, "path": path, "needs_review": needs_review, "reason": reason, "message": f"{'Updated' if action == 'update' else 'Created'} doc: {title}."}

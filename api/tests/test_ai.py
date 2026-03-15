@@ -37,22 +37,37 @@ async def test_classify_ingestion_returns_needs_review():
         assert "path" in result
 
 
-async def test_classify_ingestion_includes_known_folders_in_prompt():
+async def test_classify_ingestion_includes_folder_context_in_prompt():
     captured = {}
 
     async def fake_post(url, json=None, **kwargs):
         captured["payload"] = json
-        return AsyncMock(json=lambda: {"response": '{"action": "create", "path": "team/architecture/design.md", "title": "Design", "body": "Body.", "needs_review": false}'})
+        return AsyncMock(json=lambda: {"response": '{"action": "create", "path": "team/history/design.md", "title": "Design", "body": "Body.", "needs_review": false, "reason": "Created team/history for historical content."}'})
 
     with patch("ai.service.httpx.AsyncClient") as mock:
         mock.return_value.__aenter__.return_value.post = fake_post
         from ai.service import classify_ingestion_intent
-        await classify_ingestion_intent("architecture doc", candidate_docs=[{"path": "personal/existing.md", "title": "Existing Doc"}])
+        await classify_ingestion_intent(
+            "architecture doc",
+            candidate_docs=[{"path": "personal/existing.md", "title": "Existing Doc"}],
+            known_subfolders=["team/processes", "team/systems"],
+        )
         prompt = captured["payload"]["prompt"]
         assert "Existing documents:" in prompt
-        assert "Available folders:" in prompt
-        assert prompt.index("Existing documents:") < prompt.index("Available folders:")
-        assert "team/processes" in prompt  # from KNOWN_FOLDERS in Available folders line
+        assert "Root folders (locked): personal, team" in prompt
+        assert "team/processes" in prompt
+        assert "team/systems" in prompt
+        assert prompt.index("Existing documents:") < prompt.index("Root folders")
+
+
+async def test_classify_ingestion_returns_reason():
+    with patch("ai.service.httpx.AsyncClient") as mock:
+        mock.return_value.__aenter__.return_value.post = AsyncMock(return_value=AsyncMock(
+            json=lambda: {"response": '{"action": "create", "path": "team/history/zenobia.md", "title": "Zenobia", "body": "Historical queen.", "needs_review": false, "reason": "Created new subfolder team/history for historical content."}'}
+        ))
+        from ai.service import classify_ingestion_intent
+        result = await classify_ingestion_intent("Zenobia was a queen.", candidate_docs=[])
+        assert result["reason"] == "Created new subfolder team/history for historical content."
 
 
 async def test_classify_ingestion_prompt_includes_doc_titles():

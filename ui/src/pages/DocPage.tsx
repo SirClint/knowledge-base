@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { api, BASE, friendlyError } from "../api/client";
 import DocViewer from "../components/DocViewer";
 import Editor from "../components/Editor";
@@ -9,6 +9,7 @@ interface Doc { title: string; body: string; path: string; }
 export default function DocPage() {
   const { "*": path } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isNew = path === "new";
   const [doc, setDoc] = useState<Doc>({ title: "", body: "", path: "" });
   const [editSnapshot, setEditSnapshot] = useState<Doc | null>(null);
@@ -28,6 +29,16 @@ export default function DocPage() {
   const [comments, setComments] = useState<{id: number; body: string; author_email: string; created_at: string}[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentError, setCommentError] = useState("");
+  const locState = location.state as { ingestReason?: string } | null;
+  const [ingestReason, setIngestReason] = useState<string>(
+    locState?.ingestReason ?? ""
+  );
+
+  useEffect(() => {
+    if (location.state?.ingestReason) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentEmail = localStorage.getItem("email") ?? "";
   const currentRole = localStorage.getItem("role") ?? "reader";
@@ -83,7 +94,7 @@ export default function DocPage() {
     setError("");
     try {
       const result = await api.ingest(ingestText);
-      navigate(`/doc/${result.path}`);
+      navigate(`/doc/${result.path}`, { state: { ingestReason: result.reason ?? "" } });
     } catch (e: any) {
       setError(friendlyError(e));
       setIngesting(false);
@@ -154,6 +165,28 @@ export default function DocPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "40px auto", padding: 24 }}>
+      {ingestReason && (
+        <div style={{
+          background: "#e8f4fd",
+          border: "1px solid #b3d9f7",
+          borderRadius: 4,
+          padding: "10px 14px",
+          marginBottom: 16,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          fontSize: 14,
+        }}>
+          <span>🤖 {ingestReason}</span>
+          <button
+            onClick={() => setIngestReason("")}
+            style={{ background: "none", border: "none", cursor: "pointer", marginLeft: 12, fontSize: 16, lineHeight: 1 }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => navigate("/")}>← Back</button>
         {!isNew && !editing && currentRole !== "reader" && <button onClick={() => { setEditSnapshot({ ...doc }); setEditing(true); }}>Edit</button>}

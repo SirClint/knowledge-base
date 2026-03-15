@@ -92,27 +92,42 @@ async def merge_doc_content(existing_body: str, new_message: str) -> str:
 
 KNOWN_FOLDERS = ["personal", "team/processes", "team/systems", "team/projects"]
 
+ROOT_FOLDERS = ["personal", "team"]
 
-async def classify_ingestion_intent(message: str, candidate_docs: list[dict]) -> dict:
+
+async def classify_ingestion_intent(
+    message: str,
+    candidate_docs: list[dict],
+    known_subfolders: list[str] | None = None,
+) -> dict:
     # Format as "Title → path" so the AI can match by topic, not just filename slug
     docs_block = "\n".join(
         f"{d.get('title') or d.get('path')} → {d['path']}"
         for d in candidate_docs[:100]
     )
+    subfolders_line = (
+        f"\nKnown subfolders: {', '.join(known_subfolders)}" if known_subfolders else ""
+    )
     prompt = (
         f"Message: {message}\n\n"
         f"Existing documents:\n{docs_block}\n\n"
-        f"Available folders: {', '.join(KNOWN_FOLDERS)}"
+        f"Root folders (locked): {', '.join(ROOT_FOLDERS)}"
+        f"{subfolders_line}"
     )
     system = (
         "Return JSON: {\"action\": \"create\"|\"update\", \"path\": string|null, "
-        "\"title\": string, \"body\": string, \"needs_review\": boolean}. "
+        "\"title\": string, \"body\": string, \"needs_review\": boolean, \"reason\": string}. "
         "IMPORTANT: If ANY existing document covers the same or a closely related topic as the "
         "message, you MUST set action='update' and use that document's path. "
         "Only set action='create' if NO existing document is on the same topic. "
-        "If creating, choose the most appropriate folder from the available folders list and construct a slug filename. "
+        "If creating, place the document under one of the root folders. "
+        "You MAY reuse an existing subfolder if it fits, or invent a new descriptive subfolder "
+        "under a root if none of the existing subfolders fit. "
+        "Construct a slug filename. "
         "For body: reformat the message content as clean markdown. "
         "Set needs_review=true if you cannot confidently determine whether to update or create. "
+        "For reason: write one sentence explaining your decision "
+        "(e.g. 'Created new subfolder team/history because this is historical content'). "
         "Return ONLY valid JSON."
     )
     raw = await _ollama(prompt, system)

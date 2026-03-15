@@ -100,6 +100,7 @@ async def classify_ingestion_intent(
     candidate_docs: list[dict],
     known_subfolders: list[str] | None = None,
 ) -> dict:
+    # Format as "Title → path" so the AI can match by topic, not just filename slug
     docs_block = "\n".join(
         f"{d.get('title') or d.get('path')} → {d['path']}"
         for d in candidate_docs[:100]

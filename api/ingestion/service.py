@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import frontmatter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,10 +15,19 @@ def _normalize_path(path: str) -> str:
 
     - Strip leading slash (AI sometimes returns /personal/foo.md)
     - Ensure .md extension
+    - Slugify the filename: lowercase, hyphens instead of spaces/underscores
     """
     path = path.lstrip("/").strip()
     if path and not path.endswith(".md"):
         path += ".md"
+    if path:
+        parts = path.rsplit("/", 1)
+        stem = parts[-1][:-3]  # strip .md
+        stem = stem.lower()
+        stem = re.sub(r"[\s_]+", "-", stem)
+        stem = re.sub(r"-+", "-", stem).strip("-")
+        parts[-1] = (stem or "untitled") + ".md"
+        path = "/".join(parts)
     return path
 
 

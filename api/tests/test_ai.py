@@ -54,10 +54,10 @@ async def test_classify_ingestion_includes_folder_context_in_prompt():
         )
         prompt = captured["payload"]["prompt"]
         assert "Existing documents:" in prompt
-        assert "Root folders (locked): personal, team" in prompt
+        assert "Available folders" in prompt
         assert "team/processes" in prompt
         assert "team/systems" in prompt
-        assert prompt.index("Existing documents:") < prompt.index("Root folders")
+        assert prompt.index("Existing documents:") < prompt.index("Available folders")
 
 
 async def test_classify_ingestion_returns_reason():

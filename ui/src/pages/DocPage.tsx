@@ -29,9 +29,16 @@ export default function DocPage() {
   const [comments, setComments] = useState<{id: number; body: string; author_email: string; created_at: string}[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentError, setCommentError] = useState("");
+  const locState = location.state as { ingestReason?: string } | null;
   const [ingestReason, setIngestReason] = useState<string>(
-    (location.state as any)?.ingestReason ?? ""
+    locState?.ingestReason ?? ""
   );
+
+  useEffect(() => {
+    if (location.state?.ingestReason) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentEmail = localStorage.getItem("email") ?? "";
   const currentRole = localStorage.getItem("role") ?? "reader";

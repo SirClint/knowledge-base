@@ -54,11 +54,10 @@ async def test_classify_ingestion_includes_folder_context_in_prompt():
         )
         prompt = captured["payload"]["prompt"]
         assert "Existing documents:" in prompt
-        assert "Root folders" in prompt
-        assert "personal" in prompt
-        assert "team" in prompt
+        assert "Root folders (locked): personal, team" in prompt
         assert "team/processes" in prompt
         assert "team/systems" in prompt
+        assert prompt.index("Existing documents:") < prompt.index("Root folders")
 
 
 async def test_classify_ingestion_returns_reason():
@@ -68,9 +67,7 @@ async def test_classify_ingestion_returns_reason():
         ))
         from ai.service import classify_ingestion_intent
         result = await classify_ingestion_intent("Zenobia was a queen.", candidate_docs=[])
-        assert "reason" in result
-        assert isinstance(result["reason"], str)
-        assert len(result["reason"]) > 0
+        assert result["reason"] == "Created new subfolder team/history for historical content."
 
 
 async def test_classify_ingestion_prompt_includes_doc_titles():

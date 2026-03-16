@@ -5,6 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from db.database import get_session
 from auth.users import User, require_admin, get_user_manager
+from db.models import Setting
+
+SETTING_DEFAULTS = {"semantic_threshold": "0.50"}
+ALLOWED_SETTINGS = set(SETTING_DEFAULTS.keys())
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -15,6 +19,46 @@ class RoleUpdate(BaseModel):
 
 class PasswordReset(BaseModel):
     password: str
+
+
+class SettingUpdate(BaseModel):
+    value: str
+
+
+@router.get("/settings")
+async def get_settings(
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(require_admin),
+):
+    result = await session.execute(select(Setting))
+    stored = {s.key: s.value for s in result.scalars().all()}
+    return {**SETTING_DEFAULTS, **stored}
+
+
+@router.patch("/settings/{key}")
+async def update_setting(
+    key: str,
+    body: SettingUpdate,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(require_admin),
+):
+    if key not in ALLOWED_SETTINGS:
+        raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
+    if key == "semantic_threshold":
+        try:
+            val = float(body.value)
+            if not (0.0 <= val <= 1.0):
+                raise ValueError
+        except ValueError:
+            raise HTTPException(status_code=400, detail="semantic_threshold must be between 0.0 and 1.0")
+    setting = await session.get(Setting, key)
+    if setting is None:
+        setting = Setting(key=key, value=body.value)
+        session.add(setting)
+    else:
+        setting.value = body.value
+    await session.commit()
+    return {"key": key, "value": body.value}
 
 
 @router.get("/users")

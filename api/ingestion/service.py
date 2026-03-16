@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import frontmatter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,10 +15,19 @@ def _normalize_path(path: str) -> str:
 
     - Strip leading slash (AI sometimes returns /personal/foo.md)
     - Ensure .md extension
+    - Slugify the filename: lowercase, hyphens instead of spaces/underscores
     """
     path = path.lstrip("/").strip()
     if path and not path.endswith(".md"):
         path += ".md"
+    if path:
+        parts = path.rsplit("/", 1)
+        stem = parts[-1][:-3]  # strip .md
+        stem = stem.lower()
+        stem = re.sub(r"[\s_]+", "-", stem)
+        stem = re.sub(r"-+", "-", stem).strip("-")
+        parts[-1] = (stem or "untitled") + ".md"
+        path = "/".join(parts)
     return path
 
 
@@ -76,11 +86,16 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
     needs_review = intent.get("needs_review", False)
     reason = intent.get("reason", "")
 
-    # Strip leading heading if AI echoed the title as the first line (e.g. "# My Title\n...")
-    # to avoid the title appearing twice in the rendered view.
+    # Strip leading heading if AI echoed the title as the first line.
+    # Use startswith in both directions to handle truncated/extended variants.
     body_lines = body.strip().splitlines()
-    if body_lines and body_lines[0].lstrip("#").strip().lower() == title.strip().lower():
-        body = "\n".join(body_lines[1:]).lstrip("\n")
+    if body_lines:
+        first_heading = body_lines[0].lstrip("#").strip().lower()
+        title_lower = title.strip().lower()
+        if (first_heading == title_lower
+                or title_lower.startswith(first_heading)
+                or first_heading.startswith(title_lower)):
+            body = "\n".join(body_lines[1:]).lstrip("\n")
 
     # Guard: if the AI says update but returned a path that isn't in the existing docs,
     # it hallucinated — fall through to create so content isn't silently discarded.

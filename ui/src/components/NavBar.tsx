@@ -1,41 +1,14 @@
-import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { BASE } from "../api/client";
 
 export default function NavBar() {
-  const [aiStatus, setAiStatus] = useState<"online" | "offline" | "checking">("checking");
   const navigate = useNavigate();
   const role = localStorage.getItem("role");
-
-  async function checkAi() {
-    try {
-      const r = await fetch(`${BASE}/health/ai`);
-      const data = await r.json();
-      setAiStatus(data.ai === "online" ? "online" : "offline");
-    } catch {
-      setAiStatus("offline");
-    }
-  }
-
-  useEffect(() => {
-    checkAi();
-    const interval = setInterval(checkAi, 30000);
-    const onFocus = () => checkAi();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
 
   function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     navigate("/login");
   }
-
-  const dotColor = aiStatus === "online" ? "#22c55e" : aiStatus === "offline" ? "#ef4444" : "#999";
-  const dotLabel = aiStatus === "checking" ? "AI: checking..." : `AI: ${aiStatus}`;
 
   return (
     <div style={{
@@ -47,13 +20,6 @@ export default function NavBar() {
         Knowledge Base
       </Link>
       <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-        <span>
-          <span style={{
-            display: "inline-block", width: 8, height: 8, borderRadius: "50%",
-            background: dotColor, marginRight: 5,
-          }} />
-          {dotLabel}
-        </span>
         {role === "admin" && (
           <Link to="/users" style={{ textDecoration: "none", color: "#555" }}>Users</Link>
         )}

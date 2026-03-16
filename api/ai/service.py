@@ -47,10 +47,10 @@ def _extract_json(text: str) -> str:
 async def _ollama(prompt: str, system: str) -> str:
     """Call Ollama and return the JSON-extracted response."""
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=300) as client:
             r = await client.post(
                 f"{settings.ollama_url}/api/generate",
-                json={"model": "llama3.2", "prompt": prompt, "system": system, "stream": False},
+                json={"model": "qwen2.5:7b", "prompt": prompt, "system": system, "stream": False},
             )
             return _extract_json(r.json()["response"])
     except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -60,10 +60,10 @@ async def _ollama(prompt: str, system: str) -> str:
 async def _ollama_raw(prompt: str, system: str) -> str:
     """Call Ollama and return the raw text response (no JSON extraction)."""
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=300) as client:
             r = await client.post(
                 f"{settings.ollama_url}/api/generate",
-                json={"model": "llama3.2", "prompt": prompt, "system": system, "stream": False},
+                json={"model": "qwen2.5:7b", "prompt": prompt, "system": system, "stream": False},
             )
             return r.json()["response"].strip()
     except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -105,33 +105,38 @@ async def classify_ingestion_intent(
         f"{d.get('title') or d.get('path')} → {d['path']}"
         for d in candidate_docs[:100]
     )
-    subfolders_line = (
-        f"\nKnown subfolders: {', '.join(known_subfolders)}" if known_subfolders else ""
-    )
+    # Always show at least some folder examples so the model has concrete patterns to follow
+    SEED_FOLDERS = ["personal/notes", "personal/history", "team/projects", "team/finance"]
+    display_folders = known_subfolders if known_subfolders else SEED_FOLDERS
+    folders_block = "\n".join(f"  - {f}" for f in display_folders)
     prompt = (
         f"Message: {message}\n\n"
         f"Existing documents:\n{docs_block}\n\n"
-        f"Root folders (locked): {', '.join(ROOT_FOLDERS)}"
-        f"{subfolders_line}"
+        f"Available folders (pick one or create a similar new one):\n{folders_block}\n\n"
+        f"Path rules: pick a folder above, then add a short lowercase hyphenated filename.\n"
+        f"CORRECT: personal/history/zenobia-queen-of-palmyra.md\n"
+        f"CORRECT: personal/cooking/pasta-recipe.md\n"
+        f"CORRECT: team/finance/q4-budget-review.md\n"
+        f"WRONG: personal/Zenobia/Queen (extra level, uppercase)\n"
+        f"WRONG: personal/my doc.md (spaces, no folder)"
     )
     system = (
         "Return JSON: {\"action\": \"create\"|\"update\", \"path\": string|null, "
         "\"title\": string, \"body\": string, \"needs_review\": boolean, \"reason\": string}. "
-        "IMPORTANT: If ANY existing document covers the same or a closely related topic as the "
-        "message, you MUST set action='update' and use that document's path. "
-        "Only set action='create' if NO existing document is on the same topic. "
-        "If creating, place the document under one of the root folders. "
-        "You MAY reuse an existing subfolder if it fits, or invent a new descriptive subfolder "
-        "under a root if none of the existing subfolders fit. "
-        "Construct a slug filename. "
-        "For body: reformat the message content as clean markdown. "
-        "Set needs_review=true if you cannot confidently determine whether to update or create. "
-        "For reason: write one sentence explaining your decision "
-        "(e.g. 'Created new subfolder team/history because this is historical content'). "
+        "IMPORTANT: If ANY existing document covers the same or a closely related topic, "
+        "set action='update' and use that document's path. "
+        "Otherwise set action='create'. "
+        "For path use an existing folder if it fits, or create a new one following the root/<topic>/<slug>.md pattern shown. "
+        "For body: reformat the message as clean markdown. "
+        "Set needs_review=true if uncertain. "
+        "For reason: one sentence explaining your decision. "
         "Return ONLY valid JSON."
     )
-    raw = await _ollama(prompt, system)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"AI returned invalid JSON: {e}") from e
+    for attempt in range(2):
+        raw = await _ollama(prompt, system)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            if attempt == 0:
+                continue  # model may have been loading — retry once
+            raise ValueError(f"AI returned invalid JSON after retry: {raw[:200]}")

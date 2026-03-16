@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api, BASE, friendlyError } from "../api/client";
 import DocViewer from "../components/DocViewer";
 import Editor from "../components/Editor";
@@ -9,7 +9,6 @@ interface Doc { title: string; body: string; path: string; }
 export default function DocPage() {
   const { "*": path } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
   const isNew = path === "new";
   const [doc, setDoc] = useState<Doc>({ title: "", body: "", path: "" });
   const [editSnapshot, setEditSnapshot] = useState<Doc | null>(null);
@@ -29,16 +28,11 @@ export default function DocPage() {
   const [comments, setComments] = useState<{id: number; body: string; author_email: string; created_at: string}[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentError, setCommentError] = useState("");
-  const locState = location.state as { ingestReason?: string } | null;
-  const [ingestReason, setIngestReason] = useState<string>(
-    locState?.ingestReason ?? ""
-  );
-
-  useEffect(() => {
-    if (location.state?.ingestReason) {
-      navigate(location.pathname, { replace: true, state: {} });
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [ingestReason, setIngestReason] = useState<string>(() => {
+    const r = sessionStorage.getItem("ingestReason") ?? "";
+    sessionStorage.removeItem("ingestReason");
+    return r;
+  });
 
   const currentEmail = localStorage.getItem("email") ?? "";
   const currentRole = localStorage.getItem("role") ?? "reader";
@@ -94,7 +88,8 @@ export default function DocPage() {
     setError("");
     try {
       const result = await api.ingest(ingestText);
-      navigate(`/doc/${result.path}`, { state: { ingestReason: result.reason ?? "" } });
+      sessionStorage.setItem("ingestReason", result.reason ?? "");
+      navigate(`/doc/${result.path}`);
     } catch (e: any) {
       setError(friendlyError(e));
       setIngesting(false);
@@ -230,6 +225,7 @@ export default function DocPage() {
             <div style={{ position: "relative" }}>
               <p style={{ color: "#888", fontSize: 13, marginBottom: 12 }}>
                 Paste or describe your content. AI will determine the title, folder, and whether to create or update an existing document.
+                {" "}<span style={{ color: "#aaa" }}>First use after 5+ minutes of inactivity may take longer while the model reloads.</span>
               </p>
               {aiOnline === false && (
                 <div style={{ color: "#b45309", background: "#fef3c7", padding: "8px 12px", borderRadius: 4, marginBottom: 12, fontSize: 13 }}>

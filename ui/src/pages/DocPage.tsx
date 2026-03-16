@@ -28,11 +28,7 @@ export default function DocPage() {
   const [comments, setComments] = useState<{id: number; body: string; author_email: string; created_at: string}[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentError, setCommentError] = useState("");
-  const [ingestReason, setIngestReason] = useState<string>(() => {
-    const r = sessionStorage.getItem("ingestReason") ?? "";
-    sessionStorage.removeItem("ingestReason");
-    return r;
-  });
+  const [ingestReason, setIngestReason] = useState<string>("");
 
   const currentEmail = localStorage.getItem("email") ?? "";
   const currentRole = localStorage.getItem("role") ?? "reader";
@@ -88,7 +84,7 @@ export default function DocPage() {
     setError("");
     try {
       const result = await api.ingest(ingestText);
-      sessionStorage.setItem("ingestReason", result.reason ?? "");
+      setIngestReason(result.reason ?? "");
       navigate(`/doc/${result.path}`);
     } catch (e: any) {
       setError(friendlyError(e));

@@ -76,16 +76,17 @@ async def test_ingest_passes_titles_to_ai_for_topic_matching():
     """
     captured = {}
 
-    async def fake_classify(message, candidate_docs, known_subfolders=None):
+    async def fake_classify(message, candidate_docs, known_subfolders=None, semantic_candidates=None):
         captured["candidate_docs"] = candidate_docs
         return {"action": "update", "path": "personal/pi.md", "title": "Pi", "body": "More info."}
 
     with patch("ingestion.service.classify_ingestion_intent", new=fake_classify):
         with patch("ingestion.service._scan_vault_subfolders", return_value=[]):
-            with patch("ingestion.service.update_doc", new=AsyncMock(return_value=MagicMock())):
-                from ingestion.service import ingest_message
-                session = _mock_session(existing_docs=[("personal/pi.md", "Pi - Mathematical Constant")])
-                await ingest_message("Here is more information about pi", session=session)
+            with patch("ingestion.service.search_semantic", new=AsyncMock(return_value=[])):
+                with patch("ingestion.service.update_doc", new=AsyncMock(return_value=MagicMock())):
+                    from ingestion.service import ingest_message
+                    session = _mock_session(existing_docs=[("personal/pi.md", "Pi - Mathematical Constant")])
+                    await ingest_message("Here is more information about pi", session=session)
 
     assert captured["candidate_docs"] == [{"path": "personal/pi.md", "title": "Pi - Mathematical Constant"}]
 
@@ -211,17 +212,69 @@ async def test_ingest_passes_vault_subfolders_to_ai():
     """ingest_message must scan vault subfolders and pass them to classify_ingestion_intent."""
     captured = {}
 
-    async def fake_classify(message, candidate_docs, known_subfolders=None):
+    async def fake_classify(message, candidate_docs, known_subfolders=None, semantic_candidates=None):
         captured["known_subfolders"] = known_subfolders
         return {"action": "create", "path": "personal/test.md", "title": "Test", "body": "Body."}
 
     with patch("ingestion.service.classify_ingestion_intent", new=fake_classify):
         with patch("ingestion.service._scan_vault_subfolders", return_value=["team/processes", "team/history"]):
-            with patch("ingestion.service.create_doc", new=AsyncMock(return_value=MagicMock())):
-                from ingestion.service import ingest_message
-                await ingest_message("test message", session=_mock_session())
+            with patch("ingestion.service.search_semantic", new=AsyncMock(return_value=[])):
+                with patch("ingestion.service.create_doc", new=AsyncMock(return_value=MagicMock())):
+                    from ingestion.service import ingest_message
+                    await ingest_message("test message", session=_mock_session())
 
     assert captured["known_subfolders"] == ["team/processes", "team/history"]
+
+
+async def test_ingest_passes_semantic_candidates_to_ai():
+    """ingest_message must call search_semantic and pass enriched results to
+    classify_ingestion_intent as semantic_candidates."""
+    captured = {}
+
+    async def fake_classify(message, candidate_docs, known_subfolders=None, semantic_candidates=None):
+        captured["semantic_candidates"] = semantic_candidates
+        return {"action": "update", "path": "team/sports/2026-winter-paralympics.md",
+                "title": "2026 Winter Paralympics", "body": "Updated."}
+
+    with patch("ingestion.service.classify_ingestion_intent", new=fake_classify):
+        with patch("ingestion.service._scan_vault_subfolders", return_value=[]):
+            with patch("ingestion.service.search_semantic", new=AsyncMock(return_value=[
+                {"path": "team/sports/2026-winter-paralympics.md", "score": 0.91},
+            ])):
+                with patch("ingestion.service.update_doc", new=AsyncMock(return_value=MagicMock())):
+                    from ingestion.service import ingest_message
+                    session = _mock_session(existing_docs=[
+                        ("team/sports/2026-winter-paralympics.md", "2026 Winter Paralympics")
+                    ])
+                    await ingest_message("More info about the Winter Paralympics", session=session)
+
+    assert captured["semantic_candidates"] is not None
+    assert len(captured["semantic_candidates"]) == 1
+    assert captured["semantic_candidates"][0]["path"] == "team/sports/2026-winter-paralympics.md"
+    assert captured["semantic_candidates"][0]["title"] == "2026 Winter Paralympics"
+    assert captured["semantic_candidates"][0]["score"] == pytest.approx(0.91)
+
+
+async def test_ingest_falls_back_gracefully_when_search_semantic_fails():
+    """If search_semantic raises (e.g. embedding model offline), ingest_message
+    must still call classify_ingestion_intent — with semantic_candidates=None."""
+    captured = {}
+
+    async def fake_classify(message, candidate_docs, known_subfolders=None, semantic_candidates=None):
+        captured["semantic_candidates"] = semantic_candidates
+        return {"action": "create", "path": "personal/test.md", "title": "Test", "body": "Body."}
+
+    with patch("ingestion.service.classify_ingestion_intent", new=fake_classify):
+        with patch("ingestion.service._scan_vault_subfolders", return_value=[]):
+            with patch("ingestion.service.search_semantic",
+                       new=AsyncMock(side_effect=Exception("embedding model offline"))):
+                with patch("ingestion.service.create_doc", new=AsyncMock(return_value=MagicMock())):
+                    from ingestion.service import ingest_message
+                    await ingest_message("test message", session=_mock_session())
+
+    # Must have been called — fallback means semantic_candidates is None, not an exception
+    assert "semantic_candidates" in captured
+    assert captured["semantic_candidates"] is None
 
 
 async def test_ingest_returns_reason_from_ai():

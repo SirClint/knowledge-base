@@ -86,11 +86,16 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
     needs_review = intent.get("needs_review", False)
     reason = intent.get("reason", "")
 
-    # Strip leading heading if AI echoed the title as the first line (e.g. "# My Title\n...")
-    # to avoid the title appearing twice in the rendered view.
+    # Strip leading heading if AI echoed the title as the first line.
+    # Use startswith in both directions to handle truncated/extended variants.
     body_lines = body.strip().splitlines()
-    if body_lines and body_lines[0].lstrip("#").strip().lower() == title.strip().lower():
-        body = "\n".join(body_lines[1:]).lstrip("\n")
+    if body_lines:
+        first_heading = body_lines[0].lstrip("#").strip().lower()
+        title_lower = title.strip().lower()
+        if (first_heading == title_lower
+                or title_lower.startswith(first_heading)
+                or first_heading.startswith(title_lower)):
+            body = "\n".join(body_lines[1:]).lstrip("\n")
 
     # Guard: if the AI says update but returned a path that isn't in the existing docs,
     # it hallucinated — fall through to create so content isn't silently discarded.

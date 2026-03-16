@@ -47,7 +47,7 @@ def _extract_json(text: str) -> str:
 async def _ollama(prompt: str, system: str) -> str:
     """Call Ollama and return the JSON-extracted response."""
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=300) as client:
             r = await client.post(
                 f"{settings.ollama_url}/api/generate",
                 json={"model": "qwen2.5:7b", "prompt": prompt, "system": system, "stream": False},
@@ -60,7 +60,7 @@ async def _ollama(prompt: str, system: str) -> str:
 async def _ollama_raw(prompt: str, system: str) -> str:
     """Call Ollama and return the raw text response (no JSON extraction)."""
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=300) as client:
             r = await client.post(
                 f"{settings.ollama_url}/api/generate",
                 json={"model": "qwen2.5:7b", "prompt": prompt, "system": system, "stream": False},
@@ -132,8 +132,11 @@ async def classify_ingestion_intent(
         "For reason: one sentence explaining your decision. "
         "Return ONLY valid JSON."
     )
-    raw = await _ollama(prompt, system)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"AI returned invalid JSON: {e}") from e
+    for attempt in range(2):
+        raw = await _ollama(prompt, system)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            if attempt == 0:
+                continue  # model may have been loading — retry once
+            raise ValueError(f"AI returned invalid JSON after retry: {raw[:200]}")

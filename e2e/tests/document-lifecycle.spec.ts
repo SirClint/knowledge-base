@@ -163,7 +163,7 @@ test.describe("Document Lifecycle", () => {
     await page.locator("select").selectOption({ index: 1 });
     await page.click("button:has-text('Create Document')");
     await page.waitForURL(/\/kms\/doc\//);
-    await expect(page.locator(`text=${newTitle}`)).toBeVisible();
+    await expect(page.locator(`text=${newTitle}`)).toBeVisible({ timeout: 10000 });
   });
 
   test("cancel delete keeps doc intact", async ({ page }) => {

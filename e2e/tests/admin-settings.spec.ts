@@ -65,6 +65,9 @@ test.describe("Admin Settings", () => {
     // Use "2" — clearly above max but typed as a digit; number inputs allow it
     // (the browser only blocks form submission, not keyboard entry)
     const input = page.locator('input[type="number"]');
+    // Wait for all API calls (getSettings, getMe, listUsers) to complete before
+    // interacting — otherwise the async getSettings() callback can overwrite our typed value
+    await page.waitForLoadState("networkidle");
     await input.click();
     await page.keyboard.press("Control+a");
     await input.pressSequentially("2");
@@ -79,6 +82,7 @@ test.describe("Admin Settings", () => {
     await page.goto("./admin");
 
     const input = page.locator('input[type="number"]');
+    await page.waitForLoadState("networkidle");
     await input.click();
     await page.keyboard.press("Control+a");
     await input.pressSequentially("-0.1");
@@ -91,9 +95,15 @@ test.describe("Admin Settings", () => {
     await registerAndLogin(page, { role: "admin" });
     await page.goto("./admin");
 
-    // Type a non-numeric string by setting value directly to bypass number input sanitization
-    await page.locator('input[type="number"]').fill("");
-    await page.locator('input[type="number"]').evaluate((el: HTMLInputElement) => { el.value = "abc"; });
+    const input = page.locator('input[type="number"]');
+    await page.waitForLoadState("networkidle");
+
+    // Keyboard-based clear fires proper browser events that React's onChange picks up.
+    // fill("") on a number input does not reliably fire React's synthetic onChange.
+    // An empty number input yields parseFloat("") = NaN, which the validator rejects.
+    await input.click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Backspace");
     await page.click("button:has-text('Save')");
 
     await expect(page.locator("text=/between 0/")).toBeVisible({ timeout: 5000 });

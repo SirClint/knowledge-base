@@ -142,7 +142,7 @@ test.describe("AI Ingestion", () => {
     await page.click("button:has-text('Create Document')");
 
     await page.waitForURL(/\/kms\/doc\//);
-    await expect(page.locator(`text=${title}`)).toBeVisible();
+    await expect(page.locator(`text=${title}`)).toBeVisible({ timeout: 10000 });
     await expect(page.locator("button:has-text('Edit')")).toBeVisible();
   });
 

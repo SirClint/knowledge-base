@@ -112,10 +112,7 @@ test.describe("Documents", () => {
 
     await page.goto("./");
 
-    // Expand team folder by clicking the expand arrow
-    await page.locator("text=▶").first().click({ timeout: 5000 });
-
-    // Click processes subfolder
+    // Top-level folders are auto-expanded on load — click the subfolder directly
     await page.click("text=processes");
 
     // The team/processes doc should appear

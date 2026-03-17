@@ -259,3 +259,24 @@ test.describe("Document Lifecycle", () => {
     await expect(page.locator("text=+ New Doc")).toBeVisible();
   });
 });
+
+  test("editor wraps long lines — no horizontal scrollbar", async ({ page }) => {
+    await registerAndLogin(page, { role: "admin" });
+    const token = await getToken(page);
+    const docPath = `personal/wrap-test-${Date.now()}.md`;
+    const longLine = "A ".repeat(200).trim(); // 400-char single line
+
+    await createDoc(page, token, { title: "Wrap Test", path: docPath, body: longLine });
+    await page.goto(`./doc/${docPath}`);
+    await page.click("button:has-text('Edit')");
+
+    const editor = page.locator(".cm-editor");
+    await expect(editor).toBeVisible();
+
+    // If line-wrapping is enabled the scroll width should not exceed the visible width
+    const { scrollWidth, clientWidth } = await editor.evaluate(el => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 5); // 5px tolerance
+  });

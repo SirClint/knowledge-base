@@ -292,3 +292,60 @@ async def test_ingest_returns_reason_from_ai():
                 result = await ingest_message("Zenobia was queen of Palmyra.", session=_mock_session())
 
     assert result["reason"] == "Created new subfolder team/history for historical content."
+
+
+async def test_ingest_body_fallback_when_heading_strip_empties_body():
+    """If the AI returns a body that is only the title heading, stripping it must
+    not produce an empty body — it should fall back to the raw message."""
+    raw_message = "The Corleck Head is a 1st century CE Iron Age stone sculpture."
+    captured = {}
+
+    async def fake_classify(message, candidate_docs, known_subfolders=None, **kwargs):
+        return {
+            "action": "create",
+            "path": "team/history/corleck-head.md",
+            "title": "The Corleck Head",
+            # Body is only the title heading — nothing else
+            "body": "# The Corleck Head",
+            "reason": "New document.",
+        }
+
+    async def fake_create(path, title, body, tags, owner, session):
+        captured["body"] = body
+        return MagicMock()
+
+    with patch("ingestion.service.classify_ingestion_intent", new=fake_classify):
+        with patch("ingestion.service._scan_vault_subfolders", return_value=[]):
+            with patch("ingestion.service.create_doc", new=fake_create):
+                from ingestion.service import ingest_message
+                await ingest_message(raw_message, session=_mock_session())
+
+    assert captured["body"], "body must not be empty after heading strip"
+    assert captured["body"] == raw_message, "body should fall back to the raw message"
+
+
+async def test_ingest_body_fallback_when_ai_returns_empty_body():
+    """If the AI returns an empty body, ingest_message must fall back to the raw message."""
+    raw_message = "Important content that must not be lost."
+    captured = {}
+
+    async def fake_classify(message, candidate_docs, known_subfolders=None, **kwargs):
+        return {
+            "action": "create",
+            "path": "personal/test.md",
+            "title": "Test",
+            "body": "",
+            "reason": "Created.",
+        }
+
+    async def fake_create(path, title, body, tags, owner, session):
+        captured["body"] = body
+        return MagicMock()
+
+    with patch("ingestion.service.classify_ingestion_intent", new=fake_classify):
+        with patch("ingestion.service._scan_vault_subfolders", return_value=[]):
+            with patch("ingestion.service.create_doc", new=fake_create):
+                from ingestion.service import ingest_message
+                await ingest_message(raw_message, session=_mock_session())
+
+    assert captured["body"] == raw_message

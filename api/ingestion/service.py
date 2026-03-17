@@ -132,6 +132,9 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
                 or title_lower.startswith(first_heading)
                 or first_heading.startswith(title_lower)):
             body = "\n".join(body_lines[1:]).lstrip("\n")
+    # If stripping the heading left the body empty, fall back to the raw message
+    if not body.strip():
+        body = message
 
     # Guard: if the AI says update but returned a path that isn't in the existing docs,
     # it hallucinated — fall through to create so content isn't silently discarded.

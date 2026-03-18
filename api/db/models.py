@@ -40,3 +40,10 @@ class Comment(Base):
     body = Column(String, nullable=False)
     author_email = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)

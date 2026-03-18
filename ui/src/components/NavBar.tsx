@@ -21,7 +21,7 @@ export default function NavBar() {
       </Link>
       <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
         {role === "admin" && (
-          <Link to="/users" style={{ textDecoration: "none", color: "#555" }}>Users</Link>
+          <Link to="/admin" style={{ textDecoration: "none", color: "#555" }}>Admin</Link>
         )}
         <button onClick={logout} style={{ fontSize: 12, padding: "2px 8px" }}>Log out</button>
       </div>

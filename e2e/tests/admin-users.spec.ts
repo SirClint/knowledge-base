@@ -4,12 +4,12 @@ import { registerAndLogin, uniqueEmail } from "./helpers";
 test.describe("Admin User Management", () => {
   test("admin can see Users link in nav", async ({ page }) => {
     await registerAndLogin(page, { role: "admin" });
-    await expect(page.locator("a", { hasText: "Users" })).toBeVisible();
+    await expect(page.locator("a", { hasText: "Admin" })).toBeVisible();
   });
 
   test("reader cannot see Users link in nav", async ({ page }) => {
     await registerAndLogin(page, { role: "reader" });
-    await expect(page.locator("a", { hasText: "Users" })).not.toBeVisible();
+    await expect(page.locator("a", { hasText: "Admin" })).not.toBeVisible();
   });
 
   test("admin can list users and change role", async ({ page }) => {
@@ -21,8 +21,8 @@ test.describe("Admin User Management", () => {
     });
     if (!res.ok()) throw new Error(`Register failed: ${res.status()} ${await res.text()}`);
 
-    await page.goto("./users");
-    await expect(page).toHaveURL(/\/kms\/users/);
+    await page.goto("./admin");
+    await expect(page).toHaveURL(/\/kms\/admin/);
     await expect(page.locator(`text=${targetEmail}`)).toBeVisible({ timeout: 10000 });
 
     const row = page.locator("tbody tr", { hasText: targetEmail });
@@ -42,8 +42,8 @@ test.describe("Admin User Management", () => {
     });
     if (!res.ok()) throw new Error(`Register failed: ${res.status()} ${await res.text()}`);
 
-    await page.goto("./users");
-    await expect(page).toHaveURL(/\/kms\/users/);
+    await page.goto("./admin");
+    await expect(page).toHaveURL(/\/kms\/admin/);
     await expect(page.locator(`text=${targetEmail}`)).toBeVisible({ timeout: 10000 });
 
     page.once("dialog", d => d.accept());
@@ -55,9 +55,9 @@ test.describe("Admin User Management", () => {
 
   test("non-admin redirected away from /users", async ({ page }) => {
     await registerAndLogin(page, { role: "reader" });
-    await page.goto("./users");
+    await page.goto("./admin");
     // Non-admins are redirected to home — either way, not the /users page
-    await expect(page).not.toHaveURL(/\/kms\/users/);
+    await expect(page).not.toHaveURL(/\/kms\/admin/);
   });
 
   test("admin can reset a user's password", async ({ page }) => {
@@ -69,7 +69,7 @@ test.describe("Admin User Management", () => {
     });
     if (!res.ok()) throw new Error(`Register failed: ${res.status()} ${await res.text()}`);
 
-    await page.goto("./users");
+    await page.goto("./admin");
     await expect(page.locator(`text=${targetEmail}`)).toBeVisible({ timeout: 10000 });
 
     page.once("dialog", async d => {
@@ -86,8 +86,8 @@ test.describe("Admin User Management", () => {
   test("admin cannot change their own role (select disabled)", async ({ page }) => {
     await registerAndLogin(page, { role: "admin" });
     // Navigate via link to avoid full-page reload issues
-    await page.locator("a:has-text('Users')").click();
-    await page.waitForURL("**/kms/users");
+    await page.locator("a:has-text('Admin')").click();
+    await page.waitForURL("**/kms/admin");
     await expect(page.locator("text=(you)")).toBeVisible({ timeout: 10000 });
 
     const selfRow = page.locator("tbody tr", { hasText: "(you)" });
@@ -97,8 +97,8 @@ test.describe("Admin User Management", () => {
   test("admin cannot delete themselves (button disabled)", async ({ page }) => {
     await registerAndLogin(page, { role: "admin" });
     // Navigate via link to avoid full-page reload issues
-    await page.locator("a:has-text('Users')").click();
-    await page.waitForURL("**/kms/users");
+    await page.locator("a:has-text('Admin')").click();
+    await page.waitForURL("**/kms/admin");
     await expect(page.locator("text=(you)")).toBeVisible({ timeout: 10000 });
 
     const selfRow = page.locator("tbody tr", { hasText: "(you)" });

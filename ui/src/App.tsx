@@ -4,7 +4,7 @@ import Register from "./pages/Register";
 import Home from "./pages/Home";
 import DocPage from "./pages/DocPage";
 import ReviewPage from "./pages/ReviewPage";
-import UsersPage from "./pages/UsersPage";
+import AdminPage from "./pages/AdminPage";
 import Layout from "./components/Layout";
 
 const isTest = window.location.port === "8081";
@@ -50,7 +50,7 @@ export default function App() {
           <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
           <Route path="/doc/*" element={<PrivateRoute><DocPage /></PrivateRoute>} />
           <Route path="/review" element={<PrivateRoute><ReviewPage /></PrivateRoute>} />
-          <Route path="/users" element={<PrivateRoute><UsersPage /></PrivateRoute>} />
+          <Route path="/admin" element={<PrivateRoute><AdminPage /></PrivateRoute>} />
         </Routes>
       </div>
     </BrowserRouter>

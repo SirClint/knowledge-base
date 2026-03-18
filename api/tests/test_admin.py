@@ -94,3 +94,67 @@ async def test_change_role_invalid_value(admin_client):
 async def test_reset_password_forbidden_for_reader(reader_client):
     r = await reader_client.post("/admin/users/00000000-0000-0000-0000-000000000000/reset-password", json={"password": "newpass123"})
     assert r.status_code == 403
+
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+
+async def test_get_settings_returns_default_threshold(admin_client):
+    r = await admin_client.get("/admin/settings")
+    assert r.status_code == 200
+    data = r.json()
+    assert "semantic_threshold" in data
+    assert float(data["semantic_threshold"]) == 0.50
+
+
+async def test_get_settings_forbidden_for_reader(reader_client):
+    r = await reader_client.get("/admin/settings")
+    assert r.status_code == 403
+
+
+async def test_update_setting_valid_value(admin_client):
+    r = await admin_client.patch("/admin/settings/semantic_threshold", json={"value": "0.75"})
+    assert r.status_code == 200
+    assert r.json() == {"key": "semantic_threshold", "value": "0.75"}
+
+
+async def test_update_setting_persists(admin_client):
+    await admin_client.patch("/admin/settings/semantic_threshold", json={"value": "0.65"})
+    r = await admin_client.get("/admin/settings")
+    assert r.json()["semantic_threshold"] == "0.65"
+
+
+async def test_update_setting_boundary_zero(admin_client):
+    r = await admin_client.patch("/admin/settings/semantic_threshold", json={"value": "0.0"})
+    assert r.status_code == 200
+
+
+async def test_update_setting_boundary_one(admin_client):
+    r = await admin_client.patch("/admin/settings/semantic_threshold", json={"value": "1.0"})
+    assert r.status_code == 200
+
+
+async def test_update_setting_above_one_rejected(admin_client):
+    r = await admin_client.patch("/admin/settings/semantic_threshold", json={"value": "1.01"})
+    assert r.status_code == 400
+    assert "0.0" in r.json()["detail"] and "1.0" in r.json()["detail"]
+
+
+async def test_update_setting_negative_rejected(admin_client):
+    r = await admin_client.patch("/admin/settings/semantic_threshold", json={"value": "-0.01"})
+    assert r.status_code == 400
+
+
+async def test_update_setting_non_numeric_rejected(admin_client):
+    r = await admin_client.patch("/admin/settings/semantic_threshold", json={"value": "banana"})
+    assert r.status_code == 400
+
+
+async def test_update_unknown_setting_rejected(admin_client):
+    r = await admin_client.patch("/admin/settings/unknown_key", json={"value": "anything"})
+    assert r.status_code == 400
+    assert "Unknown setting" in r.json()["detail"]
+
+
+async def test_update_setting_forbidden_for_reader(reader_client):
+    r = await reader_client.patch("/admin/settings/semantic_threshold", json={"value": "0.9"})
+    assert r.status_code == 403

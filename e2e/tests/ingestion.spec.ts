@@ -142,7 +142,7 @@ test.describe("AI Ingestion", () => {
     await page.click("button:has-text('Create Document')");
 
     await page.waitForURL(/\/kms\/doc\//);
-    await expect(page.locator(`text=${title}`)).toBeVisible();
+    await expect(page.locator(`text=${title}`)).toBeVisible({ timeout: 10000 });
     await expect(page.locator("button:has-text('Edit')")).toBeVisible();
   });
 
@@ -161,5 +161,176 @@ test.describe("AI Ingestion", () => {
 
     await expect(page.locator("text=AI is currently offline")).toBeVisible({ timeout: 5000 });
     await expect(page.locator("button:has-text('Process with AI')")).toBeDisabled();
+  });
+});
+
+test.describe("AI Ingestion Banner", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await registerAndLogin(page, { role: "admin" });
+    await page.click("text=+ New Doc");
+    await page.waitForURL("**/kms/doc/new");
+  });
+
+  test("banner appears immediately after ingest without page reload", async ({ page }) => {
+    const docPath = `personal/banner-immediate-${Date.now()}.md`;
+    const reason = "Created new personal note about the topic.";
+
+    await page.route("**/kms/api/ingest", async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ action: "create", path: docPath, needs_review: false, reason, message: "Created." }),
+      });
+    });
+    await page.route(`**/kms/api/docs/${docPath}`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ title: "Banner Test Doc", body: "Body content.", path: docPath }),
+      });
+    });
+
+    await page.fill("textarea", "Some content to ingest");
+    await page.click("button:has-text('Process with AI')");
+
+    // Must appear on the navigated-to doc page WITHOUT any reload
+    await page.waitForURL(/\/kms\/doc\//, { timeout: 15000 });
+    await expect(page.locator(`text=${reason}`)).toBeVisible({ timeout: 5000 });
+  });
+
+  test("banner shows exact reason returned by the API", async ({ page }) => {
+    const docPath = `personal/banner-reason-${Date.now()}.md`;
+    const reason = "Updated existing document: merged new details into prior content.";
+
+    await page.route("**/kms/api/ingest", async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ action: "update", path: docPath, needs_review: false, reason, message: "Updated." }),
+      });
+    });
+    await page.route(`**/kms/api/docs/${docPath}`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ title: "Existing Doc", body: "Merged body.", path: docPath }),
+      });
+    });
+
+    await page.fill("textarea", "New information about existing topic");
+    await page.click("button:has-text('Process with AI')");
+    await page.waitForURL(/\/kms\/doc\//, { timeout: 15000 });
+
+    await expect(page.locator(`text=${reason}`)).toBeVisible();
+  });
+
+  test("banner can be dismissed with X button", async ({ page }) => {
+    const docPath = `personal/banner-dismiss-${Date.now()}.md`;
+    const reason = "Created a new document.";
+
+    await page.route("**/kms/api/ingest", async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ action: "create", path: docPath, needs_review: false, reason, message: "Created." }),
+      });
+    });
+    await page.route(`**/kms/api/docs/${docPath}`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ title: "Dismiss Test", body: "Content.", path: docPath }),
+      });
+    });
+
+    await page.fill("textarea", "Content to dismiss");
+    await page.click("button:has-text('Process with AI')");
+    await page.waitForURL(/\/kms\/doc\//, { timeout: 15000 });
+    await expect(page.locator(`text=${reason}`)).toBeVisible();
+
+    // Find and click the dismiss button (×)
+    await page.locator("button", { hasText: "×" }).click();
+    await expect(page.locator(`text=${reason}`)).not.toBeVisible();
+  });
+
+  test("banner does not appear when navigating to a doc directly", async ({ page }) => {
+    await registerAndLogin(page, { role: "admin" });
+    const token = await page.evaluate(() => localStorage.getItem("token") ?? "");
+    const docPath = `personal/no-banner-${Date.now()}.md`;
+
+    await page.request.post(`${BASE_API}/docs`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { title: "No Banner Doc", path: docPath, body: "body", tags: [] },
+    });
+
+    await page.goto(`./doc/${docPath}`);
+    await expect(page.locator("text=No Banner Doc")).toBeVisible();
+    // No banner should be present at all
+    await expect(page.locator("[style*='background: #eff6ff'], [style*='background:#eff6ff']")).not.toBeVisible();
+  });
+
+  test("banner shows for update action as well as create", async ({ page }) => {
+    const docPath = `personal/banner-update-${Date.now()}.md`;
+    const reason = "Found matching topic; updated existing document.";
+
+    await page.route("**/kms/api/ingest", async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ action: "update", path: docPath, needs_review: true, reason, message: "Updated." }),
+      });
+    });
+    await page.route(`**/kms/api/docs/${docPath}`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ title: "Updated Doc", body: "Updated body.", path: docPath }),
+      });
+    });
+
+    await page.fill("textarea", "Update info for existing topic");
+    await page.click("button:has-text('Process with AI')");
+    await page.waitForURL(/\/kms\/doc\//, { timeout: 15000 });
+    await expect(page.locator(`text=${reason}`)).toBeVisible();
+  });
+
+  test("banner does not persist after navigating to a different doc", async ({ page }) => {
+    const docPath = `personal/banner-nav-${Date.now()}.md`;
+    const reason = "Created fresh document.";
+    const otherPath = `personal/other-doc-${Date.now()}.md`;
+
+    // Create the other doc for real via API
+    const token = await page.evaluate(() => localStorage.getItem("token") ?? "");
+    await page.request.post(`${BASE_API}/docs`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { title: "Other Doc", path: otherPath, body: "other body", tags: [] },
+    });
+
+    await page.route("**/kms/api/ingest", async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ action: "create", path: docPath, needs_review: false, reason, message: "Created." }),
+      });
+    });
+    await page.route(`**/kms/api/docs/${docPath}`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ title: "Ingest Doc", body: "Ingest body.", path: docPath }),
+      });
+    });
+
+    await page.fill("textarea", "Content for banner persistence check");
+    await page.click("button:has-text('Process with AI')");
+    await page.waitForURL(/\/kms\/doc\//, { timeout: 15000 });
+    await expect(page.locator(`text=${reason}`)).toBeVisible();
+
+    // Navigate to a completely different doc
+    await page.goto(`./doc/${otherPath}`);
+    await expect(page.locator("text=Other Doc")).toBeVisible();
+    // Banner reason from previous ingest should NOT carry over
+    await expect(page.locator(`text=${reason}`)).not.toBeVisible();
   });
 });

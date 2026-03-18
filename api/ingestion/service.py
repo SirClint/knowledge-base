@@ -4,7 +4,7 @@ import frontmatter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from db.models import Document
+from db.models import Document, Setting
 from ai.service import classify_ingestion_intent, merge_doc_content, ROOT_FOLDERS
 from search.service import search_semantic
 from docs_.service import create_doc, update_doc
@@ -73,10 +73,24 @@ def _scan_vault_subfolders() -> list[str]:
     return subfolders
 
 
+async def _get_semantic_threshold(session: AsyncSession) -> float:
+    result = await session.execute(select(Setting).where(Setting.key == "semantic_threshold"))
+    setting = result.scalar_one_or_none()
+    if setting is None:
+        return 0.50
+    try:
+        return float(setting.value)
+    except ValueError:
+        return 0.50
+
+
 async def ingest_message(message: str, session: AsyncSession, owner: str = "") -> dict:
     # Get existing doc titles + paths for context so the AI can match by topic
     result = await session.execute(select(Document.path, Document.title))
     candidate_docs = [{"path": r[0], "title": r[1]} for r in result.fetchall()]
+
+    # Read admin-configured threshold for semantic candidate filtering
+    semantic_threshold = await _get_semantic_threshold(session)
 
     # Pre-identify closest matches via ChromaDB semantic search.
     # Gives the LLM specific candidates to evaluate rather than scanning all titles.
@@ -88,7 +102,7 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
             enriched = [
                 {"path": h["path"], "title": title_by_path[h["path"]], "score": h["score"]}
                 for h in hits
-                if h["path"] in title_by_path
+                if h["path"] in title_by_path and h["score"] >= semantic_threshold
             ]
             if enriched:
                 semantic_candidates = enriched
@@ -118,6 +132,9 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
                 or title_lower.startswith(first_heading)
                 or first_heading.startswith(title_lower)):
             body = "\n".join(body_lines[1:]).lstrip("\n")
+    # If stripping the heading left the body empty, fall back to the raw message
+    if not body.strip():
+        body = message
 
     # Guard: if the AI says update but returned a path that isn't in the existing docs,
     # it hallucinated — fall through to create so content isn't silently discarded.

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from db.models import Document
 from ai.service import classify_ingestion_intent, merge_doc_content, ROOT_FOLDERS
+from search.service import search_semantic
 from docs_.service import create_doc, update_doc
 from config import settings
 
@@ -77,8 +78,29 @@ async def ingest_message(message: str, session: AsyncSession, owner: str = "") -
     result = await session.execute(select(Document.path, Document.title))
     candidate_docs = [{"path": r[0], "title": r[1]} for r in result.fetchall()]
 
+    # Pre-identify closest matches via ChromaDB semantic search.
+    # Gives the LLM specific candidates to evaluate rather than scanning all titles.
+    semantic_candidates = None
+    if candidate_docs:
+        try:
+            title_by_path = {d["path"]: d["title"] for d in candidate_docs}
+            hits = await search_semantic(message, n_results=3)
+            enriched = [
+                {"path": h["path"], "title": title_by_path[h["path"]], "score": h["score"]}
+                for h in hits
+                if h["path"] in title_by_path
+            ]
+            if enriched:
+                semantic_candidates = enriched
+        except Exception:
+            pass  # Embedding unavailable — fall back to AI title-matching only
+
     known_subfolders = _scan_vault_subfolders()
-    intent = await classify_ingestion_intent(message, candidate_docs, known_subfolders=known_subfolders)
+    intent = await classify_ingestion_intent(
+        message, candidate_docs,
+        known_subfolders=known_subfolders,
+        semantic_candidates=semantic_candidates,
+    )
     action = intent.get("action", "create")
     path = _normalize_path(intent.get("path", ""))
     title = intent.get("title", "Untitled")

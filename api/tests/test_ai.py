@@ -53,11 +53,11 @@ async def test_classify_ingestion_includes_folder_context_in_prompt():
             known_subfolders=["team/processes", "team/systems"],
         )
         prompt = captured["payload"]["prompt"]
-        assert "Existing documents:" in prompt
-        assert "Available folders" in prompt
+        assert "Existing documents" in prompt
+        assert "Known folders" in prompt
         assert "team/processes" in prompt
         assert "team/systems" in prompt
-        assert prompt.index("Existing documents:") < prompt.index("Available folders")
+        assert prompt.index("Existing documents") < prompt.index("Known folders")
 
 
 async def test_classify_ingestion_returns_reason():
@@ -105,6 +105,29 @@ async def test_merge_doc_content():
         )
         assert "3.14159" in result
         assert "transcendental" in result
+
+
+async def test_classify_ingestion_prompt_includes_semantic_candidates():
+    """When semantic_candidates are provided they must appear in the prompt
+    so the model treats them as strong update candidates."""
+    captured = {}
+
+    async def fake_post(url, json=None, **kwargs):
+        captured["payload"] = json
+        return AsyncMock(json=lambda: {"response": '{"action": "update", "path": "team/sports/2026-winter-paralympics.md", "title": "Paralympics", "body": "Updated.", "needs_review": false, "reason": "Updated team/sports because semantic match found."}'})
+
+    with patch("ai.service.httpx.AsyncClient") as mock:
+        mock.return_value.__aenter__.return_value.post = fake_post
+        from ai.service import classify_ingestion_intent
+        await classify_ingestion_intent(
+            "More info about the Winter Paralympics",
+            candidate_docs=[{"path": "team/sports/2026-winter-paralympics.md", "title": "2026 Winter Paralympics"}],
+            semantic_candidates=[{"path": "team/sports/2026-winter-paralympics.md", "title": "2026 Winter Paralympics", "score": 0.91}],
+        )
+        prompt = captured["payload"]["prompt"]
+        assert "2026 Winter Paralympics" in prompt
+        assert "0.91" in prompt
+        assert "Semantic" in prompt or "semantic" in prompt
 
 
 async def test_ollama_connect_error_raises_runtime_error():

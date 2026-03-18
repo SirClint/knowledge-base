@@ -18,6 +18,7 @@ export default function Editor({ value, onChange }: Props) {
       extensions: [
         basicSetup,
         markdown(),
+        EditorView.lineWrapping,
         EditorView.updateListener.of(u => {
           if (u.docChanged) onChange(u.state.doc.toString());
         }),

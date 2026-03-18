@@ -99,6 +99,7 @@ async def classify_ingestion_intent(
     message: str,
     candidate_docs: list[dict],
     known_subfolders: list[str] | None = None,
+    semantic_candidates: list[dict] | None = None,
 ) -> dict:
     # Format as "Title → path" so the AI can match by topic, not just filename slug
     docs_block = "\n".join(
@@ -109,28 +110,56 @@ async def classify_ingestion_intent(
     SEED_FOLDERS = ["personal/notes", "personal/history", "team/projects", "team/finance"]
     display_folders = known_subfolders if known_subfolders else SEED_FOLDERS
     folders_block = "\n".join(f"  - {f}" for f in display_folders)
+    if semantic_candidates:
+        sem_lines = "\n".join(
+            f"  - {c['title']} → {c['path']} (similarity: {c['score']:.2f})"
+            for c in semantic_candidates
+        )
+        semantic_section = (
+            f"Semantic search found these as the closest existing documents:\n{sem_lines}\n\n"
+        )
+    else:
+        semantic_section = ""
+
     prompt = (
-        f"Message: {message}\n\n"
-        f"Existing documents:\n{docs_block}\n\n"
-        f"Available folders (pick one or create a similar new one):\n{folders_block}\n\n"
-        f"Path rules: pick a folder above, then add a short lowercase hyphenated filename.\n"
-        f"CORRECT: personal/history/zenobia-queen-of-palmyra.md\n"
-        f"CORRECT: personal/cooking/pasta-recipe.md\n"
-        f"CORRECT: team/finance/q4-budget-review.md\n"
-        f"WRONG: personal/Zenobia/Queen (extra level, uppercase)\n"
-        f"WRONG: personal/my doc.md (spaces, no folder)"
+        f"Message to file:\n{message}\n\n"
+        f"Existing documents (title → path):\n{docs_block if docs_block else '(none yet)'}\n\n"
+        f"--- INSTRUCTIONS ---\n\n"
+        f"STEP 1 — action field:\n"
+        f"{semantic_section}"
+        f"  DEFAULT TO UPDATE. If the message is about the same topic as any semantic match above,\n"
+        f"  set action='update' and use that document's path.\n"
+        f"  If semantic matches are listed above, strongly prefer updating one of them.\n"
+        f"  Only set action='create' if the message is about a subject clearly not covered\n"
+        f"  by any existing document above.\n"
+        f"  If multiple documents could match, pick the most closely related one.\n\n"
+        f"STEP 2 — path field (required format: folder/filename.md):\n"
+        f"  Known folders:\n{folders_block}\n"
+        f"  Rules:\n"
+        f"  - Pick the most relevant folder from the list above.\n"
+        f"  - If nothing fits, invent a new folder using one of the roots 'personal' or 'team' plus a\n"
+        f"    short descriptive topic word (e.g. personal/cooking, team/deployment).\n"
+        f"  - The topic word MUST describe the content. NEVER use generic words: subfolder, misc, new, docs, files.\n"
+        f"  - filename must be lowercase, hyphenated, no spaces or uppercase.\n"
+        f"  CORRECT: personal/history/roman-empire-notes.md\n"
+        f"  CORRECT: team/deployment/rollback-procedure.md\n"
+        f"  CORRECT: personal/cooking/carbonara-recipe.md\n"
+        f"  WRONG:   personal/subfolder/notes.md  ← 'subfolder' is not descriptive\n"
+        f"  WRONG:   team/misc/doc.md             ← 'misc' is not descriptive\n\n"
+        f"STEP 3 — other fields:\n"
+        f"  title: clear descriptive title for the document.\n"
+        f"  body: reformat the message as markdown — use ## headings for each section, blank lines between\n"
+        f"    sections, **bold** key terms. Do not produce a wall of plain text.\n"
+        f"  needs_review: true if you are uncertain about the action or folder choice.\n"
+        f"  reason: one sentence that names the action taken, the exact folder chosen, and why that folder\n"
+        f"    fits the content. Example: \"Created personal/cooking because the message is a recipe.\""
     )
     system = (
-        "Return JSON: {\"action\": \"create\"|\"update\", \"path\": string|null, "
-        "\"title\": string, \"body\": string, \"needs_review\": boolean, \"reason\": string}. "
-        "IMPORTANT: If ANY existing document covers the same or a closely related topic, "
-        "set action='update' and use that document's path. "
-        "Otherwise set action='create'. "
-        "For path use an existing folder if it fits, or create a new one following the root/<topic>/<slug>.md pattern shown. "
-        "For body: reformat the message as clean markdown. "
-        "Set needs_review=true if uncertain. "
-        "For reason: one sentence explaining your decision. "
-        "Return ONLY valid JSON."
+        "You are a document filing assistant. "
+        "Return ONLY a valid JSON object with exactly these fields: "
+        "{\"action\": \"create\" or \"update\", \"path\": string, \"title\": string, "
+        "\"body\": string, \"needs_review\": boolean, \"reason\": string}. "
+        "No markdown fences. No explanation. ONLY the JSON object."
     )
     for attempt in range(2):
         raw = await _ollama(prompt, system)

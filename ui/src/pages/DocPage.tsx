@@ -194,7 +194,7 @@ export default function DocPage() {
 
       {isNew ? (
         <div>
-          <h2 style={{ marginTop: 0 }}>New Document</h2>
+          <h2 style={{ marginTop: 0 }}>Ingest New Information</h2>
           {/* Tab bar */}
           <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: "1px solid #ddd" }}>
             <button

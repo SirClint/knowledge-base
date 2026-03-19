@@ -85,7 +85,7 @@ export default function Home() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>Knowledge Base</h1>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => navigate("/doc/new")}>+ New Doc</button>
+          <button onClick={() => navigate("/doc/new")}>+ Ingest</button>
           <button onClick={() => navigate("/review")}>Review Queue</button>
         </div>
       </div>

@@ -24,10 +24,24 @@ The heading `New Document` on the create/ingest page is misleading. The AI Inges
 
 | File | Location | Before | After |
 |------|----------|--------|-------|
-| `ui/src/pages/DocPage.tsx` | Line 197 | `<h2>New Document</h2>` | `<h2>Ingest New Information</h2>` |
+| `ui/src/pages/DocPage.tsx` | Line 197 | `<h2 style={{ marginTop: 0 }}>New Document</h2>` | `<h2 style={{ marginTop: 0 }}>Ingest New Information</h2>` |
 | `ui/src/pages/Home.tsx` | Line 88 | `+ New Doc` | `+ Ingest` |
 
 No logic changes — label-only updates.
+
+### E2E Test Updates Required
+
+Renaming the button breaks 17 Playwright selectors across 7 test files that use `text=+ New Doc`. All must be updated to `text=+ Ingest`:
+
+| File | Occurrences |
+|------|-------------|
+| `e2e/tests/document-lifecycle.spec.ts` | 8 |
+| `e2e/tests/ingestion.spec.ts` | 2 |
+| `e2e/tests/documents.spec.ts` | 2 |
+| `e2e/tests/ingestion-real.spec.ts` | 1 |
+| `e2e/tests/auth.spec.ts` | 1 |
+| `e2e/tests/smoke.spec.ts` | 2 |
+| `e2e/tests/review.spec.ts` | 1 |
 
 ---
 
@@ -35,7 +49,7 @@ No logic changes — label-only updates.
 
 ### Placement
 
-A small `About` text link at the bottom of the sidebar in `ui/src/pages/Home.tsx`, below the folder list, separated by a thin top border and small top margin.
+A small `About` text link inside the sidebar `<div>` in `ui/src/pages/Home.tsx`, appended after the `Object.keys(folderTree)...map(...)` block. It is not fixed/sticky — it simply sits below the last rendered folder item in normal document flow, separated by a thin top border and small top margin. For typical vault sizes this will always be visible without scrolling.
 
 ### Trigger
 
@@ -64,6 +78,10 @@ Tech Stack
   Infra:    Docker, Caddy, Nginx
 ```
 
+### Version Source
+
+`Version: 0.0.1` is hardcoded inline in the modal JSX. To bump in future, update the string directly in `Home.tsx`.
+
 ### State
 
 One new state variable in `Home` component: `const [showAbout, setShowAbout] = useState(false)`.
@@ -83,4 +101,6 @@ No backend changes. No new files.
 
 - Manual: verify "Ingest" button navigates to `/doc/new`; verify heading reads "Ingest New Information" on that page
 - Manual: About link opens modal; ✕ and backdrop close it; GitHub link opens in new tab
-- Existing E2E tests cover the create-doc flow and should not need changes (no selectors on these labels)
+- E2E: update all 17 `text=+ New Doc` selectors to `text=+ Ingest` across 7 test files, then run `make e2e` to confirm all pass
+- Existing E2E tests for doc create flow remain valid after selector updates
+- `e2e/tests/smoke.spec.ts`: rename test description string `"AI offline warning shown on new doc page when Ollama unreachable"` → `"AI offline warning shown on ingest page when Ollama unreachable"` (not a selector, but update for consistency)

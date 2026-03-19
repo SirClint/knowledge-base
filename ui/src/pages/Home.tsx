@@ -42,6 +42,7 @@ export default function Home() {
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAbout, setShowAbout] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -131,6 +132,14 @@ export default function Home() {
               </div>
             );
           })}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #ddd" }}>
+            <span
+              onClick={() => setShowAbout(true)}
+              style={{ fontSize: 12, color: "#888", cursor: "pointer" }}
+            >
+              About
+            </span>
+          </div>
         </div>
 
         {/* Main content */}
@@ -157,6 +166,51 @@ export default function Home() {
           </ul>
         </div>
       </div>
+      {showAbout && (
+        <div
+          onClick={() => setShowAbout(false)}
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 6, padding: 24,
+              maxWidth: 400, width: "90%", position: "relative",
+            }}
+          >
+            <button
+              onClick={() => setShowAbout(false)}
+              style={{
+                position: "absolute", top: 12, right: 12,
+                border: "none", background: "none", cursor: "pointer", fontSize: 16,
+              }}
+            >
+              ✕
+            </button>
+            <h2 style={{ marginTop: 0, marginBottom: 16 }}>Knowledge Base</h2>
+            <p style={{ margin: "0 0 8px" }}><strong>Version:</strong> 0.0.1</p>
+            <p style={{ margin: "0 0 8px" }}>
+              <strong>GitHub:</strong>{" "}
+              <a href="https://github.com/SirClint/knowledge-base" target="_blank" rel="noreferrer">
+                github.com/SirClint/knowledge-base
+              </a>
+            </p>
+            <div style={{ marginTop: 12 }}>
+              <strong>Tech Stack</strong>
+              <ul style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: 13 }}>
+                <li><strong>Frontend:</strong> React 18, TypeScript, Vite, CodeMirror 6</li>
+                <li><strong>Backend:</strong> FastAPI, Python, SQLite, ChromaDB, Ollama</li>
+                <li><strong>Infra:</strong> Docker, Caddy, Nginx</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

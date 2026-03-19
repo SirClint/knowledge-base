@@ -9,7 +9,7 @@ test.describe("Documents", () => {
   });
 
   test("new doc page shows AI ingestion textarea", async ({ page }) => {
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.waitForURL("**/kms/doc/new");
     await expect(page.locator("textarea")).toBeVisible();
     await expect(page.locator("button:has-text('Process with AI')")).toBeVisible();
@@ -43,7 +43,7 @@ test.describe("Documents", () => {
       });
     });
 
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.waitForURL("**/kms/doc/new");
     await page.fill("textarea", "Notes about our deployment pipeline.");
     await page.click("button:has-text('Process with AI')");

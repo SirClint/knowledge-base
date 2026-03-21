@@ -89,6 +89,6 @@ test.describe("Review Queue", () => {
     await page.waitForURL("**/kms/review");
     await expect(page.locator("a:has-text('← Back')")).toBeVisible({ timeout: 10000 });
     await page.click("a:has-text('← Back')");
-    await expect(page.locator("text=+ New Doc")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=+ Ingest")).toBeVisible({ timeout: 10000 });
   });
 });

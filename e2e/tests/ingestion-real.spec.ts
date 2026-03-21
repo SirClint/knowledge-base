@@ -33,7 +33,7 @@ async function isAiOnline(page: Page): Promise<boolean> {
 }
 
 async function ingestAndWait(page: Page, message: string): Promise<string> {
-  await page.click("text=+ New Doc");
+  await page.click("text=+ Ingest");
   await page.waitForURL("**/kms/doc/new");
   await page.fill("textarea", message);
   await page.click("button:has-text('Process with AI')");

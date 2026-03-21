@@ -11,7 +11,7 @@ test.describe("AI Ingestion", () => {
   test.beforeEach(async ({ page }) => {
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await registerAndLogin(page, { role: "admin" });
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.waitForURL("**/kms/doc/new");
   });
 
@@ -168,7 +168,7 @@ test.describe("AI Ingestion Banner", () => {
   test.beforeEach(async ({ page }) => {
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await registerAndLogin(page, { role: "admin" });
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.waitForURL("**/kms/doc/new");
   });
 

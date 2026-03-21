@@ -39,7 +39,7 @@ test.describe("Document Lifecycle", () => {
       });
     });
 
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.fill("textarea", "Full content here\nLine two\nLine three");
     await page.click("button:has-text('Process with AI')");
     await page.waitForURL(/\/kms\/doc\//, { timeout: 15000 });
@@ -49,14 +49,14 @@ test.describe("Document Lifecycle", () => {
 
     await page.click("button:has-text('← Back')");
     await page.waitForURL("**/kms");
-    await expect(page.locator("text=+ New Doc")).toBeVisible();
+    await expect(page.locator("text=+ Ingest")).toBeVisible();
   });
 
   test("create via manual → view → edit → save → verify content", async ({ page }) => {
     await registerAndLogin(page, { role: "admin" });
     const title = `Lifecycle Manual ${Date.now()}`;
 
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.click("button:has-text('Manual')");
     await page.fill('input[placeholder="Document title"]', title);
     await page.locator("select").selectOption({ index: 1 });
@@ -88,7 +88,7 @@ test.describe("Document Lifecycle", () => {
     page.once("dialog", d => d.accept());
     await page.click("button:has-text('Delete')");
     await page.waitForURL("**/kms");
-    await expect(page.locator("text=+ New Doc")).toBeVisible();
+    await expect(page.locator("text=+ Ingest")).toBeVisible();
 
     // Doc should return 404 now
     const res = await page.request.get(`${BASE_API}/docs/${docPath}`, {
@@ -141,7 +141,7 @@ test.describe("Document Lifecycle", () => {
       }
     });
 
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.fill("textarea", "AI content");
     await page.click("button:has-text('Process with AI')");
     await page.waitForURL(/\/kms\/doc\//, { timeout: 15000 });
@@ -157,7 +157,7 @@ test.describe("Document Lifecycle", () => {
 
     // Step 3: Recreate via manual tab
     const newTitle = `Recreated Manual ${Date.now()}`;
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.click("button:has-text('Manual')");
     await page.fill('input[placeholder="Document title"]', newTitle);
     await page.locator("select").selectOption({ index: 1 });
@@ -252,11 +252,11 @@ test.describe("Document Lifecycle", () => {
 
   test("Back button from new doc page goes to home", async ({ page }) => {
     await registerAndLogin(page, { role: "admin" });
-    await page.click("text=+ New Doc");
+    await page.click("text=+ Ingest");
     await page.waitForURL("**/kms/doc/new");
     await page.click("button:has-text('← Back')");
     await page.waitForURL("**/kms");
-    await expect(page.locator("text=+ New Doc")).toBeVisible();
+    await expect(page.locator("text=+ Ingest")).toBeVisible();
   });
 });
 

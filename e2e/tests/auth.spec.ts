@@ -21,7 +21,7 @@ test.describe("Authentication", () => {
     const { email } = await registerAndLogin(page);
     // Should be on home page
     await expect(page.locator("h1")).toContainText("Knowledge Base");
-    await expect(page.locator("text=+ New Doc")).toBeVisible();
+    await expect(page.locator("text=+ Ingest")).toBeVisible();
   });
 
   test("login with invalid credentials shows error", async ({ page }) => {

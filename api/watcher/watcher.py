@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +16,7 @@ async def index_file(path: Path, vault_path: Path, session: AsyncSession) -> Doc
     doc = result.scalar_one_or_none()
     if doc is None:
         doc = Document(path=rel_path)
+        doc.created_at = datetime.utcnow()
         session.add(doc)
     doc.title = parsed.title
     doc.tags = json.dumps(parsed.tags)

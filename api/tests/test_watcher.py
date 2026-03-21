@@ -43,6 +43,26 @@ async def test_index_file_creates_record(session):
         doc = result.scalar_one_or_none()
         assert doc is not None
         assert doc.owner == "bob"
+        assert doc.created_at is not None, "watcher should set created_at on new docs"
+    finally:
+        os.unlink(path)
+
+
+async def test_index_file_does_not_overwrite_created_at(session):
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        f.write(SAMPLE)
+        path = Path(f.name)
+    try:
+        with patch("search.service.index_doc_vectors", new=AsyncMock()):
+            await index_file(path, path.parent, session)
+            from sqlalchemy import select
+            result = await session.execute(select(Document).where(Document.title == "Test Doc"))
+            original_created_at = result.scalar_one().created_at
+            # Re-index the same file (simulates API restart)
+            await index_file(path, path.parent, session)
+            result = await session.execute(select(Document).where(Document.title == "Test Doc"))
+            doc = result.scalar_one()
+            assert doc.created_at == original_created_at, "re-indexing should not overwrite created_at"
     finally:
         os.unlink(path)
 

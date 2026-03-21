@@ -37,6 +37,10 @@ async def create_db():
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[db migration] {stmt!r} skipped: {e}")
+        # Backfill created_at from indexed_at for existing rows that predate this column
+        await conn.execute(text(
+            "UPDATE documents SET created_at = indexed_at WHERE created_at IS NULL AND indexed_at IS NOT NULL"
+        ))
 
 
 async def get_session() -> AsyncSession:

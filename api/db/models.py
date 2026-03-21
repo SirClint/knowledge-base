@@ -20,6 +20,8 @@ class Document(Base):
     review_interval = Column(String, default="90d")
     body_preview = Column(String, default="")  # first 500 chars for list views
     indexed_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, nullable=True)
+    updated_by = Column(String, default="")
 
 
 class DocVersion(Base):

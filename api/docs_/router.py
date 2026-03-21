@@ -58,8 +58,14 @@ async def read(path: str, session=Depends(get_session), user=Depends(current_act
     if full_path.exists():
         post = frontmatter.load(str(full_path))
         body = post.content
-    return {"id": doc.id, "title": doc.title, "path": doc.path, "body": body,
-            "tags": doc.tags, "owner": doc.owner, "status": doc.status}
+    return {
+        "id": doc.id, "title": doc.title, "path": doc.path, "body": body,
+        "tags": doc.tags, "owner": doc.owner, "status": doc.status,
+        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        "created_by": doc.owner or None,
+        "updated_at": doc.indexed_at.isoformat() if doc.indexed_at else None,
+        "updated_by": doc.updated_by or None,
+    }
 
 
 @router.put("/{path:path}", dependencies=[Depends(require_editor)])

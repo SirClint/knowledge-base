@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -18,6 +19,7 @@ async def create_doc(path: str, title: str, body: str, tags: list, owner: str, s
     meta = {"tags": tags, "owner": owner, "status": "current"}
     await write_doc_file(path, title, body, meta)
     doc = Document(path=path, title=title, tags=json.dumps(tags), owner=owner, body_preview=body[:500])
+    doc.created_at = datetime.utcnow()
     session.add(doc)
     await session.commit()
     # Index into vector store for semantic search
@@ -78,6 +80,7 @@ async def update_doc(path: str, updates: dict, session: AsyncSession, saved_by: 
             post.content = updates["body"]
         full_path.write_text(frontmatter.dumps(post))
 
+    doc.updated_by = saved_by
     await session.commit()
     return doc
 

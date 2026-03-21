@@ -151,6 +151,36 @@ test.describe("Documents", () => {
     // Should show updated content
     await expect(page.locator("text=Updated content")).toBeVisible();
   });
+
+  test("document metadata bar is visible on doc page", async ({ page }) => {
+    await page.route("**/kms/api/docs/personal/test-meta.md", route => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 1, title: "Test Doc", path: "personal/test-meta.md", body: "hello",
+        tags: "[]", owner: "alice@example.com", status: "current",
+        created_at: "2026-02-14T10:00:00",
+        created_by: "alice@example.com",
+        updated_at: null,
+        updated_by: null,
+      }),
+    }));
+    await page.route("**/kms/api/comments/personal/test-meta.md", route => route.fulfill({
+      status: 200, contentType: "application/json", body: "[]",
+    }));
+    await page.goto("./doc/personal/test-meta.md");
+    await page.waitForLoadState("networkidle");
+    const meta = page.locator("[data-testid='doc-metadata']");
+    await expect(meta).toBeVisible({ timeout: 10000 });
+    await expect(meta).toContainText("Created");
+    await expect(meta).toContainText("alice@example.com");
+  });
+
+  test("metadata bar not shown when creating new doc", async ({ page }) => {
+    await page.goto("./doc/new");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("[data-testid='doc-metadata']")).not.toBeVisible();
+  });
 });
 
 /** Extract the JWT token from localStorage */

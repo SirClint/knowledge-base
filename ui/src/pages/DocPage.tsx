@@ -4,7 +4,15 @@ import { api, BASE, friendlyError } from "../api/client";
 import DocViewer from "../components/DocViewer";
 import Editor from "../components/Editor";
 
-interface Doc { title: string; body: string; path: string; }
+interface Doc {
+  title: string;
+  body: string;
+  path: string;
+  created_at?: string;
+  created_by?: string;
+  updated_at?: string;
+  updated_by?: string;
+}
 
 export default function DocPage() {
   const { "*": path } = useParams();
@@ -310,6 +318,17 @@ export default function DocPage() {
         </>
       ) : (
         <>
+          <div
+            data-testid="doc-metadata"
+            style={{ fontSize: 12, color: "#888", marginBottom: 12 }}
+          >
+            Created {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : "—"} by {doc.created_by || "—"}
+            {doc.updated_by && (
+              <>
+                {" · "}Last updated {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString() : "—"} by {doc.updated_by}
+              </>
+            )}
+          </div>
           <DocViewer title={doc.title} body={doc.body} />
           {showHistory && (
             <div style={{

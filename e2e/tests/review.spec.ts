@@ -91,4 +91,14 @@ test.describe("Review Queue", () => {
     await page.click("a:has-text('← Back')");
     await expect(page.locator("text=+ Ingest")).toBeVisible({ timeout: 10000 });
   });
+
+  test("Review Queue button has descriptive tooltip", async ({ page }) => {
+    await page.goto("./");
+    await page.waitForLoadState("networkidle");
+    const btn = page.locator("button:has-text('Review Queue')");
+    await expect(btn).toBeVisible({ timeout: 10000 });
+    const title = await btn.getAttribute("title");
+    expect(title).toBeTruthy();
+    expect(title!.toLowerCase()).toContain("review");
+  });
 });

@@ -40,4 +40,6 @@ vault-test/*
 !vault-test/team/systems/.gitkeep
 !vault-test/team/projects/
 !vault-test/team/projects/.gitkeep
+!vault-test/docs/
+!vault-test/docs/user-guide.md
 backups/*.tar.gz

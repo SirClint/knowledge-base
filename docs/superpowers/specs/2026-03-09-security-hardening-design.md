@@ -34,14 +34,16 @@ Two phases. Phase 1 is a single PR targeting critical code vulnerabilities and t
 
 ### 1.1 Path Traversal Guard
 
-**File:** `api/docs_/service.py`
+**Files:** `api/docs_/service.py` and `api/docs_/router.py`
 
-Add a `_safe_path(path: str) -> Path` helper that:
+Add a `_safe_path(path: str) -> Path` helper in `service.py` that:
 1. Resolves `Path(settings.vault_path) / path` to an absolute path
 2. Asserts the resolved path starts with `Path(settings.vault_path).resolve()`
-3. Raises `HTTP 400` if not
+3. Raises `HTTPException(400)` if not
 
-Call this at the top of `write_doc_file`, `get_doc`, `update_doc`, and `delete_doc` before any file I/O. Rejects paths containing `..` or any traversal that escapes the vault root.
+Call this at the top of `write_doc_file`, `get_doc`, `update_doc`, and `delete_doc` in `service.py` before any file I/O.
+
+**Also apply in `docs_/router.py`:** The `read` endpoint (GET `/{path:path}`) constructs `full_path = Path(settings.vault_path) / path` and reads the file directly without going through the service layer (lines 56–58). This path bypasses the service-layer guard entirely — an attacker with a valid JWT could call `GET /docs/../../etc/passwd` and read arbitrary host files. Apply `_safe_path(path)` at the top of the `read` endpoint handler, before the vault file is opened. Import `_safe_path` from `docs_.service`.
 
 ### 1.2 Block Admin Self-Registration
 
@@ -72,14 +74,22 @@ Apply via `slowapi` limiter:
 | `POST /ingest` | 30/minute | per authenticated user |
 | `POST /ingest/email` | 20/minute | per IP |
 
-`POST /ingest` cannot use the default IP-based key (multiple users behind NAT would share a bucket). Define a custom key function:
+`POST /ingest` cannot use the default IP-based key (multiple users behind NAT would share a bucket). However, `request.state` set inside the route body is not available when `SlowAPIMiddleware` evaluates the key function on the inbound request — the middleware intercepts before the route handler runs. The correct approach is to decode the JWT directly in the key function:
 ```python
+from jose import jwt as jose_jwt, JWTError
+
 def _key_by_user(request: Request) -> str:
-    # user object is attached to request.state by the auth dependency
-    user = getattr(request.state, "rate_limit_user", None)
-    return user.email if user else get_remote_address(request)
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth.removeprefix("Bearer ")
+        try:
+            payload = jose_jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            return payload.get("sub") or get_remote_address(request)
+        except JWTError:
+            pass
+    return get_remote_address(request)
 ```
-The `ingest` route sets `request.state.rate_limit_user = user` before the limiter evaluates. Apply with `@limiter.limit("30/minute", key_func=_key_by_user)`.
+After the Phase 2 cookie migration, replace the `Authorization` header read with reading the cookie: `request.cookies.get("kmstoken", "")`. Apply with `@limiter.limit("30/minute", key_func=_key_by_user)`. **Note:** Do not use `request.state` to pass the user — it will not be populated at key evaluation time.
 
 Add `SlowAPIMiddleware` to `main.py`. Add `RateLimitExceeded` handler returning HTTP 429.
 
@@ -160,7 +170,13 @@ AuditLog(
 
 **New endpoint:** `GET /admin/audit-log?page=1&limit=50` — admin-only, returns paginated `AuditLog` rows newest-first.
 
-**Note on `auth.login_failure`:** fastapi-users does not expose an `on_failed_login` hook. Failed logins must be captured differently. Add a thin ASGI middleware in `main.py` that intercepts `POST /auth/jwt/login` responses with status 400 (fastapi-users returns 400 on bad credentials): if the response status is 400, read the request body (form data) to get the attempted email, then call `log_event(action="auth.login_failure", actor_email=attempted_email, ip=client_ip)`. The middleware must buffer the request body so that the downstream route can still read it — use `await request.body()` and reassign via a custom `receive` closure. This is a small but non-trivial middleware; implement and test it independently before wiring to the audit log.
+**Note on `auth.login_failure`:** fastapi-users does not expose an `on_failed_login` hook. Failed logins must be captured differently. Add a thin ASGI middleware in `main.py` that intercepts `POST /auth/jwt/login` responses with status 400 (fastapi-users returns 400 on bad credentials).
+
+Implementation notes:
+- In Starlette 0.27+, calling `await request.body()` caches the result on the `Request` object internally. You do not need to write a custom `receive` closure — a simple `await request.body()` in the middleware is sufficient and the downstream route handler will still be able to read the body.
+- The login endpoint accepts `application/x-www-form-urlencoded`. Parse the buffered body with `urllib.parse.parse_qs(body.decode())` and extract `username` (fastapi-users uses the `username` field for email). Apply `urllib.parse.unquote_plus` to handle encoded characters. If the body is empty or malformed, default `actor_email` to `"unknown"`.
+- Call `log_event(action="auth.login_failure", actor_email=attempted_email, ip=request.client.host)` after the response is confirmed 400.
+- Implement and integration-test this middleware independently before wiring to the audit log.
 
 ### 1.9 TLS Config Hooks in Caddy
 
@@ -228,13 +244,23 @@ command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 **File:** `api/config.py`
 
-After `settings = Settings()`, add:
+The secret key validation must run after the secret value is fully resolved (including Docker secrets, added in 2.5). To avoid ordering issues between Phase 1 and Phase 2, integrate the validation as a pydantic `model_validator` inside `Settings` rather than a block after `settings = Settings()`. This ensures the check runs regardless of whether the value came from an env var or a Docker secrets file:
+
 ```python
-if settings.secret_key in ("changeme", "") or len(settings.secret_key) < 32:
-    raise RuntimeError(
-        "SECRET_KEY is insecure. Generate one with: openssl rand -hex 32"
-    )
+from pydantic import model_validator
+
+class Settings(BaseSettings):
+    ...
+    @model_validator(mode="after")
+    def validate_secret_key(self) -> "Settings":
+        if self.secret_key in ("changeme", "") or len(self.secret_key) < 32:
+            raise ValueError(
+                "SECRET_KEY is insecure. Generate one with: openssl rand -hex 32"
+            )
+        return self
 ```
+
+In Phase 2, the `_read_secret()` helper populates `secret_key` before `Settings()` is constructed (passed as an override), so the validator will see the resolved value.
 
 **File:** `.env.example`
 
@@ -279,6 +305,8 @@ USER nginx
 ```
 
 **Dependency note:** The `nginx` user cannot write to `/var/cache/nginx`, `/var/run`, or `/tmp` by default. This item depends on 2.3 (read-only containers + tmpfs mounts for those paths). Implement 2.1 and 2.3 together — applying `USER nginx` without the tmpfs mounts will crash the nginx container at startup.
+
+**Session lifetime note for `on_after_register`:** `self.user_db.update()` works correctly only when `UserManager` is obtained through the FastAPI DI chain (`Depends(get_user_manager)`), which provides a `SQLAlchemyUserDatabase` backed by a live async session. Do not instantiate `UserManager` outside the DI chain (e.g., in tests or scripts) and call this hook — the session will be stale or missing. Test the self-registration role-lock specifically in an integration test that confirms the DB row has `role="reader"` regardless of the submitted value.
 
 ### 2.2 Docker Network Segmentation
 
@@ -340,7 +368,16 @@ def _read_secret(name: str, fallback: str) -> str:
         return secret_path.read_text().strip()
     return fallback
 ```
-Call this when constructing `Settings` for `secret_key` and `mailgun_webhook_signing_key`. Falls back to the env var so the test environment continues to work without Docker secrets configured.
+Override `secret_key` and `mailgun_webhook_signing_key` at `Settings` construction time:
+```python
+settings = Settings(
+    secret_key=_read_secret("secret_key", os.environ.get("SECRET_KEY", "changeme")),
+    mailgun_webhook_signing_key=_read_secret(
+        "mailgun_signing_key", os.environ.get("MAILGUN_WEBHOOK_SIGNING_KEY", "")
+    ),
+)
+```
+This ensures `_read_secret()` runs before the Phase 1 `model_validator` fires, so the validator sees the Docker-secrets value rather than the raw env var. Falls back to the env var so the test environment continues to work without Docker secrets configured.
 
 `${HOME}/.kms-secrets/` is documented in `DEPLOYMENT.md` with instructions to create it with `chmod 700` and populate it with `openssl rand -hex 32 > ~/.kms-secrets/secret_key`.
 
@@ -359,6 +396,8 @@ rm backup.tar.gz
 The private key lives on the admin's local machine only. Backup files are unreadable without it.
 
 **Key loss warning:** If the private key is lost, all encrypted backups become permanently unreadable. `DEPLOYMENT.md` must include a prominent warning: store the age private key in a password manager or offline backup. Consider printing and storing it physically for a system holding business-confidential data.
+
+**Update prune glob in `backup.sh`:** Any existing prune/rotation logic that matches `*.tar.gz` must be updated to match `*.tar.gz.age` — after the age change, the unencrypted `.tar.gz` files are deleted immediately and only `.tar.gz.age` files remain. A stale glob will silently fail to prune old backups.
 
 `deploy.sh` updated to verify `AGE_PUBLIC_KEY` is set before running backup.
 
@@ -393,7 +432,8 @@ cookie_transport = CookieTransport(
 
 - Remove all `localStorage.getItem/setItem/removeItem` calls for `token`.
 - Remove manual `Authorization: Bearer` header injection — browser sends cookie automatically.
-- Add `credentials: "include"` to all fetch calls.
+- Add `credentials: "include"` to all fetch calls, including the AI status poll in `NavBar.tsx` (which calls `GET /health/ai` directly every 30s — verify this call also gets `credentials: "include"` after auth-gating in 1.6).
+- Add an explicit `logout()` function that calls `DELETE /auth/jwt/logout`. Without this, clicking logout only clears React state — the httpOnly cookie remains valid in the browser for up to 3600 seconds. The UI logout action must call this endpoint to invalidate the cookie server-side.
 
 **File:** `ui/src/` (auth context)
 

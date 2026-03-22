@@ -41,6 +41,8 @@ Add a `_safe_path(path: str) -> Path` helper in `service.py` that:
 2. Asserts the resolved path starts with `Path(settings.vault_path).resolve()`
 3. Raises `HTTPException(400)` if not
 
+**Import note:** `service.py` does not currently import from `fastapi`. Add `from fastapi import HTTPException` to `service.py` before defining `_safe_path`, or the function will raise a `NameError` at runtime.
+
 Call this at the top of `write_doc_file`, `get_doc`, `update_doc`, and `delete_doc` in `service.py` before any file I/O.
 
 **Also apply in `docs_/router.py`:** The `read` endpoint (GET `/{path:path}`) constructs `full_path = Path(settings.vault_path) / path` and reads the file directly without going through the service layer (lines 56–58). This path bypasses the service-layer guard entirely — an attacker with a valid JWT could call `GET /docs/../../etc/passwd` and read arbitrary host files. Apply `_safe_path(path)` at the top of the `read` endpoint handler, before the vault file is opened. Import `_safe_path` from `docs_.service`.
@@ -50,6 +52,8 @@ Call this at the top of `write_doc_file`, `get_doc`, `update_doc`, and `delete_d
 **File:** `api/auth/users.py`
 
 Override `UserManager.on_after_register` to forcibly reset any submitted role to `"reader"`. At the point this hook fires, the user has already been committed by fastapi-users in its own transaction. The `user` object passed to the hook is a detached ORM instance and must not be re-committed directly. Use `await self.user_db.update(user, {"role": "reader"})` — the `user_db` adapter is already available on `self` and handles the session correctly.
+
+**DI session requirement:** `self.user_db.update()` works correctly only when `UserManager` is obtained through the FastAPI DI chain (`Depends(get_user_manager)`), which provides a `SQLAlchemyUserDatabase` backed by a live async session. Do not instantiate `UserManager` outside the DI chain — the session will be stale. Test this with an integration test that confirms the DB row has `role="reader"` regardless of the submitted value.
 
 The `UserCreate` schema retains the `role` field for admin panel use. Public registration always produces a `reader`. Role promotion goes through `PATCH /admin/users/{id}/role` only.
 

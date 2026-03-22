@@ -47,7 +47,9 @@ Call this at the top of `write_doc_file`, `get_doc`, `update_doc`, and `delete_d
 
 **File:** `api/auth/users.py`
 
-Override `UserManager.on_after_register` to forcibly set `user.role = "reader"` regardless of submitted value, then commit. The `UserCreate` schema retains the `role` field for admin panel use. Public registration always produces a `reader`. Role promotion goes through `PATCH /admin/users/{id}/role` only.
+Override `UserManager.on_after_register` to forcibly reset any submitted role to `"reader"`. At the point this hook fires, the user has already been committed by fastapi-users in its own transaction. The `user` object passed to the hook is a detached ORM instance and must not be re-committed directly. Use `await self.user_db.update(user, {"role": "reader"})` — the `user_db` adapter is already available on `self` and handles the session correctly.
+
+The `UserCreate` schema retains the `role` field for admin panel use. Public registration always produces a `reader`. Role promotion goes through `PATCH /admin/users/{id}/role` only.
 
 ### 1.3 Role Gate on `POST /ingest`
 
@@ -63,12 +65,21 @@ Change dependency from `current_active_user` to `require_editor`. Reader-role us
 
 Apply via `slowapi` limiter:
 
-| Endpoint | Limit |
-|---|---|
-| `POST /auth/jwt/login` | 10/minute per IP |
-| `POST /auth/register` | 5/minute per IP |
-| `POST /ingest` | 30/minute per user |
-| `POST /ingest/email` | 20/minute per IP |
+| Endpoint | Limit | Key |
+|---|---|---|
+| `POST /auth/jwt/login` | 10/minute | per IP (default `get_remote_address`) |
+| `POST /auth/register` | 5/minute | per IP |
+| `POST /ingest` | 30/minute | per authenticated user |
+| `POST /ingest/email` | 20/minute | per IP |
+
+`POST /ingest` cannot use the default IP-based key (multiple users behind NAT would share a bucket). Define a custom key function:
+```python
+def _key_by_user(request: Request) -> str:
+    # user object is attached to request.state by the auth dependency
+    user = getattr(request.state, "rate_limit_user", None)
+    return user.email if user else get_remote_address(request)
+```
+The `ingest` route sets `request.state.rate_limit_user = user` before the limiter evaluates. Apply with `@limiter.limit("30/minute", key_func=_key_by_user)`.
 
 Add `SlowAPIMiddleware` to `main.py`. Add `RateLimitExceeded` handler returning HTTP 429.
 
@@ -86,27 +97,31 @@ Add `CORSMiddleware` with:
 
 Add `allowed_origins: str = "http://localhost:8080,http://localhost:8081"`.
 
-### 1.6 Protect API Docs and Health Summary
+### 1.6 Protect API Docs and Health Endpoints
 
 **File:** `api/main.py`
 
 - Change `FastAPI(docs_url=...)` to `docs_url="/api-docs" if settings.enable_api_docs else None` and same for `redoc_url`.
 - Add `enable_api_docs: bool = False` to `config.py`.
 - Set `ENABLE_API_DOCS=true` in `.env.test` only.
-- Add `Depends(current_active_user)` to `GET /health/summary`.
+- Add `Depends(current_active_user)` to `GET /health/summary` — it leaks doc/user counts.
+- Add `Depends(current_active_user)` to `GET /health/ai` — it reveals whether Ollama is running and reachable from the container network. `/health` (simple liveness) remains public for load-balancer/orchestrator use.
 
 ### 1.7 Email Ingestion Hardening
 
 #### Token Deduplication
 
-**New DB model:** `UsedToken(token: str PK, used_at: DateTime)`
+**New DB model:** `UsedToken(token_hash: String PK, used_at: DateTime)`
+
+Store a SHA-256 hash of the token rather than the raw token — Mailgun tokens are variable-length strings of unspecified length, and hashing avoids unbounded VARCHAR primary keys. `token_hash = hashlib.sha256(token.encode()).hexdigest()` (64 chars, fixed).
 
 **File:** `api/ingestion/router.py`
 
 Before processing an email webhook:
-1. Check if `token` exists in `UsedToken`. If yes → HTTP 403 "Duplicate request".
-2. Insert `UsedToken(token=token, used_at=now())`.
-3. Prune entries older than 24 hours on each request (async, fire-and-forget).
+1. Compute `token_hash = sha256(token)`.
+2. Check if `token_hash` exists in `UsedToken`. If yes → HTTP 403 "Duplicate request".
+3. Insert `UsedToken(token_hash=token_hash, used_at=now())`.
+4. Prune entries older than 24 hours using FastAPI `BackgroundTasks` — the prune runs after the response is sent and gets its own DB session via `async_session_maker()`. Do not reuse the request session in the background task.
 
 #### Body Size Cap
 
@@ -134,7 +149,7 @@ AuditLog(
 | Event | Trigger location |
 |---|---|
 | `auth.login_success` | `UserManager.on_after_login` |
-| `auth.login_failure` | `UserManager.on_failed_login` (fastapi-users hook) |
+| `auth.login_failure` | Custom middleware (see note below) |
 | `doc.create` | `docs_/router.py` POST |
 | `doc.update` | `docs_/router.py` PUT |
 | `doc.delete` | `docs_/router.py` DELETE |
@@ -144,6 +159,8 @@ AuditLog(
 | `ingest.email` | `ingestion/router.py` POST /email (log sender + subject only, not body) |
 
 **New endpoint:** `GET /admin/audit-log?page=1&limit=50` — admin-only, returns paginated `AuditLog` rows newest-first.
+
+**Note on `auth.login_failure`:** fastapi-users does not expose an `on_failed_login` hook. Failed logins must be captured differently. Add a thin ASGI middleware in `main.py` that intercepts `POST /auth/jwt/login` responses with status 400 (fastapi-users returns 400 on bad credentials): if the response status is 400, read the request body (form data) to get the attempted email, then call `log_event(action="auth.login_failure", actor_email=attempted_email, ip=client_ip)`. The middleware must buffer the request body so that the downstream route can still read it — use `await request.body()` and reassign via a custom `receive` closure. This is a small but non-trivial middleware; implement and test it independently before wiring to the audit log.
 
 ### 1.9 TLS Config Hooks in Caddy
 
@@ -157,14 +174,17 @@ AuditLog(
     # TLS block injected per CADDY_TLS_MODE:
     # auto:     tls {$CADDY_EMAIL}
     # internal: tls internal
-    # off:      (no tls block)
+    # off:      (no tls block — default)
 
     header {
+        # HSTS is only effective over HTTPS. Only emit when TLS is enabled.
+        # When CADDY_TLS_MODE=off, the Caddyfile template must omit this line.
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Frame-Options "DENY"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
-        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'"
+        # CSP GATE: add the line below ONLY after 1.12 (inline style sweep) is complete.
+        # Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server
     }
@@ -180,6 +200,10 @@ AuditLog(
     }
 }
 ```
+
+**HSTS conditional:** The Caddyfile is templated (via env vars). When `CADDY_TLS_MODE=off`, the `Strict-Transport-Security` header block must be omitted — sending HSTS over plain HTTP has no security effect and can cause browser preload issues if TLS is later misconfigured. Use a Caddyfile snippet or separate `Caddyfile.tls` that is included conditionally from the compose file's `volumes` override.
+
+**CSP gate:** The `Content-Security-Policy` line ships commented out. It is uncommented as a separate commit only after the inline-style sweep (1.12) is verified complete — removing `'unsafe-inline'` from a live UI with inline styles will break all styling.
 
 When `CADDY_TLS_MODE=auto` or `internal`, add a second site block redirecting `http://` → `https://`.
 
@@ -226,12 +250,14 @@ Set a valid 32-char test key (placeholder, tracked in git — acceptable for tes
 
 **Scope:** All files under `ui/src/`
 
+This is a significant refactor — CLAUDE.md notes "UI uses inline styles" as a pervasive pattern across all components. It may warrant its own PR separate from the other Phase 1 items, delivered after the rest of Phase 1 merges.
+
 Audit every component for:
 - `style={{...}}` props → extract to `.css` class
 - Inline `<script>` tags → none expected, but verify
 - `dangerouslySetInnerHTML` → audit for XSS risk
 
-Extract styles into `ui/src/styles/` directory with one CSS file per component or a shared `global.css`. This is a **prerequisite** for deploying the `Content-Security-Policy` header — the header is added to the Caddyfile only after the UI sweep is confirmed clean.
+Extract styles into `ui/src/styles/` directory with one CSS file per component or a shared `global.css`. This is a **prerequisite** for deploying the `Content-Security-Policy` header — the header is added to the Caddyfile (and its git-commented CSP line uncommented) only after this sweep is confirmed clean in both the test environment and a browser audit (DevTools Console must show zero CSP violations).
 
 ---
 
@@ -251,6 +277,8 @@ Adjust volume mount permissions in `docker-compose.yml` to `chown` the `kb_data`
 # final stage
 USER nginx
 ```
+
+**Dependency note:** The `nginx` user cannot write to `/var/cache/nginx`, `/var/run`, or `/tmp` by default. This item depends on 2.3 (read-only containers + tmpfs mounts for those paths). Implement 2.1 and 2.3 together — applying `USER nginx` without the tmpfs mounts will crash the nginx container at startup.
 
 ### 2.2 Docker Network Segmentation
 
@@ -289,9 +317,9 @@ Remove the `extra_hosts: host.docker.internal:host-gateway` block. Ollama commun
 ```yaml
 secrets:
   secret_key:
-    file: ~/.kms-secrets/secret_key
+    file: ${HOME}/.kms-secrets/secret_key
   mailgun_signing_key:
-    file: ~/.kms-secrets/mailgun_signing_key
+    file: ${HOME}/.kms-secrets/mailgun_signing_key
 
 services:
   api:
@@ -300,11 +328,21 @@ services:
       - mailgun_signing_key
 ```
 
+**Note:** Docker Compose does not expand `~` in `file:` paths for secrets. Use `${HOME}` instead — Compose does expand this env var. Do not use `~` or it will fail at `docker compose up` with a file-not-found error.
+
 **File:** `api/config.py`
 
-Add a helper that reads from `/run/secrets/<name>` if the file exists, otherwise falls back to the env var. This keeps test env working without Docker secrets.
+Add a `_read_secret(name: str, fallback: str) -> str` helper:
+```python
+def _read_secret(name: str, fallback: str) -> str:
+    secret_path = Path(f"/run/secrets/{name}")
+    if secret_path.exists():
+        return secret_path.read_text().strip()
+    return fallback
+```
+Call this when constructing `Settings` for `secret_key` and `mailgun_webhook_signing_key`. Falls back to the env var so the test environment continues to work without Docker secrets configured.
 
-`~/.kms-secrets/` is documented in `DEPLOYMENT.md` with instructions to create it with `chmod 700` and populate it with `openssl rand -hex 32 > ~/.kms-secrets/secret_key`.
+`${HOME}/.kms-secrets/` is documented in `DEPLOYMENT.md` with instructions to create it with `chmod 700` and populate it with `openssl rand -hex 32 > ~/.kms-secrets/secret_key`.
 
 ### 2.6 Encrypted Backups with `age`
 
@@ -319,6 +357,8 @@ rm backup.tar.gz
 **New env var:** `AGE_PUBLIC_KEY` — the admin's age public key. Stored in `.env` (non-sensitive).
 
 The private key lives on the admin's local machine only. Backup files are unreadable without it.
+
+**Key loss warning:** If the private key is lost, all encrypted backups become permanently unreadable. `DEPLOYMENT.md` must include a prominent warning: store the age private key in a password manager or offline backup. Consider printing and storing it physically for a system holding business-confidential data.
 
 `deploy.sh` updated to verify `AGE_PUBLIC_KEY` is set before running backup.
 
@@ -361,7 +401,17 @@ Replace `localStorage` role/email reads with a React context populated from a `G
 
 **CSRF:** `SameSite=Strict` is sufficient — no CSRF token needed.
 
-**Note:** `cookie_secure=True` requires HTTPS. In test env (HTTP), set `cookie_secure=False` via `COOKIE_SECURE=false` env var.
+**Note:** `cookie_secure=True` requires HTTPS. The transport object is instantiated at module import time, so it must read from `settings` at that point. Add `cookie_secure: bool = True` to `config.py` `Settings`, set `COOKIE_SECURE=false` in `.env.test`, and construct the transport as:
+```python
+cookie_transport = CookieTransport(
+    cookie_name="kmstoken",
+    cookie_max_age=3600,
+    cookie_secure=settings.cookie_secure,
+    cookie_httponly=True,
+    cookie_samesite="strict",
+    cookie_path="/kms/api",
+)
+```
 
 ### 2.9 Password Strength Enforcement
 
@@ -393,6 +443,7 @@ Apply the same check in `admin/router.py` `reset_password` endpoint (currently o
 | `api/main.py` | CORS, rate limiting, disable API docs, auth health/summary |
 | `api/config.py` | `allowed_origins`, `enable_api_docs`, secret key validation |
 | `api/db/models.py` | Add `AuditLog`, `UsedToken` models |
+| `api/audit/__init__.py` | New — empty, creates `audit` package |
 | `api/audit/service.py` | New — `log_event()` helper |
 | `api/admin/router.py` | Add `GET /admin/audit-log` endpoint |
 | `api/Dockerfile` | Remove `--reload` |
@@ -436,7 +487,7 @@ Apply the same check in `admin/router.py` `reset_password` endpoint (currently o
 | `CADDY_DOMAIN` | prod `.env` | Hostname for auto TLS |
 | `CADDY_EMAIL` | prod `.env` | ACME contact email |
 | `AGE_PUBLIC_KEY` | prod `.env` | Backup encryption recipient |
-| `COOKIE_SECURE` | `.env.test` | Set `false` for HTTP test env |
+| `COOKIE_SECURE` | `.env.test` | Set `false` for HTTP test env (field: `cookie_secure: bool = True` in `Settings`) |
 
 ---
 

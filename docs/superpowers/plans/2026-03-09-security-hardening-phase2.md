@@ -39,6 +39,7 @@ make e2e              # Playwright E2E tests (test env must be running)
 | `ui/src/App.tsx` | Modify | Wrap with AuthContext provider |
 | `ui/src/pages/Login.tsx` | Modify | Use AuthContext; remove localStorage writes |
 | `ui/src/components/NavBar.tsx` | Modify | Use AuthContext for role/email; fix AI poll to include credentials |
+| `api/tests/test_audit.py` | Modify | Update `test_admin_audit_log_endpoint` fixture from Bearer to cookie auth |
 | `backup.sh` | Modify | Pipe archive through `age` encryption; update prune glob |
 | `deploy.sh` | Modify | Verify `AGE_PUBLIC_KEY` before backup |
 | `.env.example` | Modify | Add `AGE_PUBLIC_KEY`, `COOKIE_SECURE` |
@@ -96,16 +97,29 @@ exec gosu appuser "$@"
 RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
 ```
 
-- [ ] **Step 3: Update ui/Dockerfile**
+- [ ] **Step 3: Update ui/Dockerfile and nginx.conf**
 
-Add `USER nginx` after the final `COPY` in the nginx stage. Also ensure nginx config writes only to writable paths:
+Setting `USER nginx` in the Dockerfile causes the nginx master process to start as the `nginx` user. That user cannot bind to port 80 (privileged port, requires root or `CAP_NET_BIND_SERVICE`). The fix: change nginx to listen on port 8080 (unprivileged) and update the Caddy reverse proxy target to match.
+
+**Read `ui/nginx.conf` first.** Then update the `listen` directive from `80` to `8080`:
+
+```nginx
+server {
+    listen 8080;
+    # ... rest of config unchanged
+}
+```
+
+Update `docker-compose.yml` and `docker-compose.test.yml` — in the Caddy Caddyfile and compose `depends_on`, the UI is referenced as `ui:80`. Change both Caddyfiles' reverse_proxy line from `ui:80` to `ui:8080`.
+
+Then update `ui/Dockerfile`:
 
 ```dockerfile
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# nginx drops privileges after binding port 80; confirm with USER nginx
 USER nginx
+EXPOSE 8080
 ```
 
 - [ ] **Step 4: Add network segmentation and tmpfs to docker-compose.yml**
@@ -362,9 +376,14 @@ from pydantic_settings import BaseSettings
 from pydantic import model_validator
 
 
-def _read_secret(name: str, fallback: str) -> str:
-    """Read a value from a Docker secrets file, falling back to the provided default."""
-    secret_path = Path(f"/run/secrets/{name}")
+def _read_secret(path: str, fallback: str) -> str:
+    """Read a secret from a file path, falling back to the provided default.
+
+    In production: path is /run/secrets/<name> (Docker secrets mount).
+    In tests: path is any file path (e.g. tmp_path from pytest).
+    Accepts a full path — does NOT prepend /run/secrets/ automatically.
+    """
+    secret_path = Path(path)
     if secret_path.exists():
         return secret_path.read_text().strip()
     return fallback
@@ -789,17 +808,52 @@ Remove the `BearerTransport` import and the old `bearer_transport` variable.
 
 - [ ] **Step 2: Update test infrastructure for cookie-based auth**
 
-Backend tests use `httpx.AsyncClient` with `ASGITransport`. The httpx client automatically handles `Set-Cookie` response headers and sends cookies on subsequent requests — no manual token extraction needed.
+Backend tests use `httpx.AsyncClient` with `ASGITransport`. The httpx client handles `Set-Cookie` headers automatically — but only if the subsequent request's path matches the cookie's `Path` attribute.
 
-Update `conftest.py` to add a new fixture pattern for cookie-auth:
+**Cookie path mismatch:** `CookieTransport` sets `cookie_path="/kms/api"`. Test clients make requests to paths like `/docs`, `/admin/audit-log` (no `/kms/api` prefix). The httpx cookie jar will NOT send the cookie on those requests, causing spurious 401s in tests.
+
+**Fix:** Use a test-environment override of `cookie_path`. Add `cookie_secure: bool = True` and `cookie_path: str = "/kms/api"` to `config.py`. In `.env.test`, set `COOKIE_PATH=/` so the cookie is sent on all paths in the test client. Update `CookieTransport` to read `settings.cookie_path`:
 
 ```python
-# In conftest.py, add a helper for getting a logged-in client (cookie auth)
+cookie_transport = CookieTransport(
+    cookie_name="kmstoken",
+    cookie_max_age=3600,
+    cookie_secure=settings.cookie_secure,
+    cookie_httponly=True,
+    cookie_samesite="strict",
+    cookie_path=settings.cookie_path,   # "/" in test, "/kms/api" in prod
+)
+```
+
+Add to `config.py`: `cookie_path: str = "/kms/api"`
+Add to `.env.test`: `COOKIE_PATH=/`
+
+Update `conftest.py` to add a login helper:
+
+```python
 async def login_client(client, email: str, password: str) -> None:
-    """Log in via POST /auth/jwt/login — cookie is set automatically on the client."""
+    """Log in via POST /auth/jwt/login — cookie is stored automatically by httpx."""
     r = await client.post("/auth/jwt/login", data={"username": email, "password": password})
     assert r.status_code == 200, f"Login failed: {r.text}"
-    # httpx AsyncClient stores the Set-Cookie automatically
+```
+
+Also update `test_audit.py` — the `test_admin_audit_log_endpoint` fixture currently extracts `r.json()["access_token"]` and sets a Bearer header. Replace with the cookie pattern (login, then use the client directly without setting any auth header):
+
+```python
+async def test_admin_audit_log_endpoint(editor_client):
+    from tests.conftest import create_test_user
+    from db.database import create_db
+    import auth.users  # noqa
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+
+    await create_db()
+    await create_test_user("audit_admin@test.com", "Securepass1!", "admin")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.post("/auth/jwt/login", data={"username": "audit_admin@test.com", "password": "Securepass1!"})
+        # Cookie stored automatically — no Authorization header needed
+        r = await c.get("/admin/audit-log")
+        assert r.status_code == 200
 ```
 
 - [ ] **Step 3: Update test fixtures in test_docs.py, test_admin.py, test_security.py**

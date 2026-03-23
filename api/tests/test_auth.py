@@ -59,6 +59,15 @@ async def test_register_as_admin_gets_reader(client):
     })
     assert r.status_code == 201
 
+    # Confirm the DB row has role='reader', not the submitted role
+    from db.database import async_session_maker
+    from auth.users import User
+    from sqlalchemy import select
+    async with async_session_maker() as session:
+        result = await session.execute(select(User).where(User.email == "wannabe_admin@example.com"))
+        db_user = result.scalar_one()
+        assert db_user.role == "reader", f"Expected role=reader, got {db_user.role!r}"
+
     login = await client.post("/auth/jwt/login", data={
         "username": "wannabe_admin@example.com",
         "password": "Securepass1!",

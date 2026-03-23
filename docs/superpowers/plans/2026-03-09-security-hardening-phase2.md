@@ -780,6 +780,7 @@ This is the largest change — replaces the entire auth token transport. Backend
 - Modify: `api/tests/test_auth.py`
 - Modify: `api/tests/test_docs.py`
 - Modify: `api/tests/test_admin.py`
+- Modify: `api/tests/test_ingestion.py` — remove `r.json()["access_token"]` extraction
 - Modify: `ui/src/api/client.ts`
 - Create: `ui/src/contexts/AuthContext.tsx`
 - Modify: `ui/src/App.tsx`
@@ -886,9 +887,9 @@ async def test_admin_audit_log_endpoint(editor_client):
         assert r.status_code == 200
 ```
 
-- [ ] **Step 3: Update test fixtures in test_docs.py, test_admin.py, test_security.py**
+- [ ] **Step 3: Update test fixtures in test_docs.py, test_admin.py, test_security.py, test_ingestion.py**
 
-Replace fixtures that extract `access_token` with cookie-based equivalents:
+Replace fixtures that extract `access_token` with cookie-based equivalents. **Also update `test_ingestion.py`** — it manually extracts `r.json()["access_token"]` and sets a Bearer header; after `CookieTransport`, the login response contains no `access_token` JSON body and this will raise `KeyError`.
 
 ```python
 # Before (bearer):
@@ -914,6 +915,18 @@ async def editor_client():
 ```
 
 Apply this pattern to ALL fixtures in ALL test files that currently do `token = r.json()["access_token"]` and `c.headers["Authorization"] = f"Bearer {token}"`.
+
+In `test_ingestion.py`, the `test_reader_cannot_ingest` test logs in inline and sets a Bearer header. Update it to rely on the cookie jar:
+
+```python
+async def test_reader_cannot_ingest(client):
+    await create_db()
+    await create_test_user("reader@test.com", "Securepass1!", "reader")
+    await client.post("/auth/jwt/login", data={"username": "reader@test.com", "password": "Securepass1!"})
+    # cookie stored automatically; no Authorization header needed
+    r = await client.post("/ingest", json={"message": "test"})
+    assert r.status_code == 403
+```
 
 - [ ] **Step 4: Update test_auth.py**
 

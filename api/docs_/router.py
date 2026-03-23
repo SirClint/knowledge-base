@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from db.database import get_session
 from db.models import Document
-from docs_.service import create_doc, get_doc, update_doc, delete_doc
+from docs_.service import create_doc, get_doc, update_doc, delete_doc, _safe_path
 from auth.users import require_editor, require_admin, current_active_user
 from config import settings
 from ai.service import KNOWN_FOLDERS
@@ -49,6 +49,7 @@ async def list_folders():
 
 @router.get("/{path:path}")
 async def read(path: str, session=Depends(get_session), user=Depends(current_active_user)):
+    _safe_path(path)  # guard against path traversal BEFORE file read
     doc = await get_doc(path, session)
     if not doc:
         raise HTTPException(404)

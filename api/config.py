@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     mailgun_webhook_signing_key: str = ""
     ingest_email_whitelist: str = ""  # comma-separated emails, e.g. "you@example.com,other@example.com"
     app_version: str = "unknown"
+    allowed_origins: str = "http://localhost:8080,http://localhost:8081"
+    enable_api_docs: bool = False
 
     @model_validator(mode="after")
     def validate_secret_key(self) -> "Settings":

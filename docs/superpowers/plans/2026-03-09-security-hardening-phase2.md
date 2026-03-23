@@ -417,14 +417,8 @@ class Settings(BaseSettings):
 # Resolve secrets from Docker secrets files first, then fall back to env vars.
 # _read_secret runs before Settings() so the model_validator sees the resolved value.
 settings = Settings(
-    secret_key=_read_secret(
-        "secret_key",
-        os.environ.get("SECRET_KEY", "changeme"),
-    ),
-    mailgun_webhook_signing_key=_read_secret(
-        "mailgun_signing_key",
-        os.environ.get("MAILGUN_WEBHOOK_SIGNING_KEY", ""),
-    ),
+    secret_key=_read_secret("/run/secrets/secret_key", os.environ.get("SECRET_KEY", "changeme")),
+    mailgun_webhook_signing_key=_read_secret("/run/secrets/mailgun_signing_key", os.environ.get("MAILGUN_WEBHOOK_SIGNING_KEY", "")),
 )
 ```
 
@@ -765,6 +759,7 @@ This is the largest change — replaces the entire auth token transport. Backend
 
 **Files:**
 - Modify: `api/auth/users.py`
+- Modify: `api/ingestion/router.py` — update `_key_by_user` to read cookie instead of Bearer header
 - Modify: `api/tests/conftest.py`
 - Modify: `api/tests/test_auth.py`
 - Modify: `api/tests/test_docs.py`
@@ -805,6 +800,25 @@ auth_backend = AuthenticationBackend(
 ```
 
 Remove the `BearerTransport` import and the old `bearer_transport` variable.
+
+- [ ] **Step 1b: Update `_key_by_user` in ingestion/router.py to read cookie**
+
+The per-user rate limit key function currently reads the `Authorization` Bearer header. After the cookie migration it will always fall through to the IP fallback. Update it to read the `kmstoken` cookie instead:
+
+```python
+# In api/ingestion/router.py — replace the existing _key_by_user function
+from jose import jwt as jose_jwt, JWTError
+
+def _key_by_user(request: Request) -> str:
+    token = request.cookies.get("kmstoken", "")
+    if token:
+        try:
+            payload = jose_jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            return payload.get("sub") or get_remote_address(request)
+        except JWTError:
+            pass
+    return get_remote_address(request)
+```
 
 - [ ] **Step 2: Update test infrastructure for cookie-based auth**
 
@@ -1161,6 +1175,7 @@ Before going live, verify:
 - [ ] Age private key is backed up in a password manager
 - [ ] Host OS has full-disk encryption (LUKS)
 - [ ] `CADDY_TLS_MODE` is `auto` or `internal` (not `off`)
+- [ ] HSTS header uncommented in `caddy/Caddyfile` (the line `# Strict-Transport-Security "max-age=31536000; includeSubDomains"` — remove the leading `#` **only after TLS is confirmed working**; sending HSTS over plain HTTP is harmful)
 - [ ] `COOKIE_SECURE` is `true` (default) in prod `.env`
 - [ ] `ENABLE_API_DOCS` is not set (defaults `false`)
 - [ ] At least one admin account created and tested

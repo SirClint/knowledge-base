@@ -112,6 +112,22 @@ server {
 
 Update `docker-compose.yml` and `docker-compose.test.yml` — in the Caddy Caddyfile and compose `depends_on`, the UI is referenced as `ui:80`. Change both Caddyfiles' reverse_proxy line from `ui:80` to `ui:8080`.
 
+- [ ] **Step 3b: Update both Caddyfiles to proxy to ui:8080**
+
+In `caddy/Caddyfile`, find the line:
+```
+        reverse_proxy ui:80
+```
+Replace with:
+```
+        reverse_proxy ui:8080
+```
+
+Do the same in `caddy/Caddyfile.test`:
+```
+        reverse_proxy ui:8080
+```
+
 Then update `ui/Dockerfile`:
 
 ```dockerfile
@@ -932,7 +948,7 @@ Expected: All pass. If any test still references `access_token` in JSON, it will
 - [ ] **Step 6: Commit backend changes**
 
 ```bash
-git add api/auth/users.py api/tests/
+git add api/auth/users.py api/ingestion/router.py api/tests/
 git commit -m "feat: switch JWT transport to httpOnly cookie (CookieTransport)"
 ```
 

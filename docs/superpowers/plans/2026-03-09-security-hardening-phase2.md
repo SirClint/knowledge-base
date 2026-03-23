@@ -88,12 +88,12 @@ set -e
 # Fix ownership on volumes that are mounted as root
 chown -R appuser:appuser /vault /data 2>/dev/null || true
 
-exec su-exec appuser "$@"
+exec gosu appuser "$@"
 ```
 
-**Note:** `su-exec` is a minimal `sudo` alternative. Add it to the Dockerfile:
+**Note:** Use `gosu`, not `su-exec`. `su-exec` is an Alpine package only — `python:3.12-slim` is Debian-based and `apt-get install su-exec` will fail with "Unable to locate package". `gosu` is the standard Debian equivalent. Add it to the Dockerfile before the `COPY . .` line:
 ```dockerfile
-RUN apt-get update && apt-get install -y --no-install-recommends su-exec && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
 ```
 
 - [ ] **Step 3: Update ui/Dockerfile**
@@ -311,28 +311,47 @@ git commit -m "chore: remove extra_hosts from prod, document Ollama alternatives
 Add to `api/tests/test_security.py`:
 
 ```python
-async def test_read_secret_from_file(tmp_path, monkeypatch):
-    """_read_secret() reads from a file when it exists, falling back to env var."""
+def test_read_secret_from_file(tmp_path):
+    """_read_secret() reads from a Docker secrets file path when it exists."""
     secret_file = tmp_path / "my_secret"
     secret_file.write_text("file-based-secret-value\n")
 
-    # Import after setting up the tmp file
-    import importlib
-    import config as cfg
-    importlib.reload(cfg)  # reset module state
-
-    result = cfg._read_secret.__wrapped__(str(secret_file), "fallback")
+    # _read_secret is a plain function — call it directly with the file path
+    from config import _read_secret
+    result = _read_secret(str(secret_file), "fallback")
     assert result == "file-based-secret-value"
 
 
-async def test_read_secret_falls_back_to_env():
+def test_read_secret_falls_back_when_file_missing():
     """_read_secret() returns the fallback when the secrets file does not exist."""
-    import config as cfg
-    result = cfg._read_secret("/run/secrets/nonexistent_secret_xyz", "my-fallback")
+    from config import _read_secret
+    result = _read_secret("/run/secrets/nonexistent_xyz_12345", "my-fallback")
     assert result == "my-fallback"
 ```
 
-**Note:** The `__wrapped__` access is for testing the helper directly if it's a plain function. Alternatively, just test the behavior via the `Settings` object.
+**Note:** `_read_secret` is a plain function — no `__wrapped__` needed. The first argument is a full path (e.g., `/run/secrets/secret_key`); in tests, pass a `tmp_path`-based path to a real file.
+
+The `_read_secret` signature accepts a full path for the secrets file. In `config.py`, it is called with `/run/secrets/<name>`. In tests, pass a path to a temp file. The function must be written to accept any path (not just `/run/secrets/` paths) for this to be testable:
+
+```python
+def _read_secret(path: str, fallback: str) -> str:
+    """Read a secret from a file path, falling back to the provided default.
+    In production, path is /run/secrets/<name> (Docker secrets mount point).
+    """
+    from pathlib import Path
+    secret_path = Path(path)
+    if secret_path.exists():
+        return secret_path.read_text().strip()
+    return fallback
+```
+
+The call sites in `settings = Settings(...)` use full paths:
+```python
+settings = Settings(
+    secret_key=_read_secret("/run/secrets/secret_key", os.environ.get("SECRET_KEY", "changeme")),
+    mailgun_webhook_signing_key=_read_secret("/run/secrets/mailgun_signing_key", os.environ.get("MAILGUN_WEBHOOK_SIGNING_KEY", "")),
+)
+```
 
 - [ ] **Step 2: Add `_read_secret` and update Settings construction in config.py**
 

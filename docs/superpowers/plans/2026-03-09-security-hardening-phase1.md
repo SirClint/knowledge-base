@@ -819,34 +819,55 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 ```
 
-fastapi-users routes are registered via `include_router` and can't receive `@limiter.limit` decorators directly. Use a path-inspecting middleware for auth endpoints:
+fastapi-users routes are registered via `include_router` and can't receive `@limiter.limit` decorators directly. Applying slowapi's private `_check_request_limit` with a `None` endpoint raises `AttributeError` in slowapi 0.1.9. Use a simple self-contained in-memory rate limiter for the auth endpoints instead:
 
 ```python
+import time
+from collections import defaultdict
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-class PathRateLimitMiddleware(BaseHTTPMiddleware):
-    """Apply per-path rate limits using slowapi's limiter."""
+class _SimpleRateLimiter:
+    """Thread-safe in-memory rate limiter for per-IP, per-path limiting."""
 
-    LIMITS = {
-        ("POST", "/auth/jwt/login"): "10/minute",
-        ("POST", "/auth/register"): "5/minute",
-        ("POST", "/ingest/email"): "20/minute",
+    # (method, path) → (max_requests, window_seconds)
+    LIMITS: dict[tuple[str, str], tuple[int, int]] = {
+        ("POST", "/auth/jwt/login"): (10, 60),
+        ("POST", "/auth/register"): (5, 60),
+        ("POST", "/ingest/email"): (20, 60),
     }
 
+    def __init__(self):
+        self._log: dict[str, list[float]] = defaultdict(list)
+
+    def is_allowed(self, key: str, max_req: int, window: int) -> bool:
+        now = time.monotonic()
+        times = [t for t in self._log[key] if now - t < window]
+        self._log[key] = times
+        if len(times) >= max_req:
+            return False
+        self._log[key].append(now)
+        return True
+
+
+_path_limiter = _SimpleRateLimiter()
+
+
+class PathRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        path = request.url.path
-        method = request.method
-        limit_str = self.LIMITS.get((method, path))
-        if limit_str:
-            try:
-                await limiter._check_request_limit(request, None, limit_str, False)
-            except RateLimitExceeded:
+        limit_cfg = _SimpleRateLimiter.LIMITS.get((request.method, request.url.path))
+        if limit_cfg:
+            ip = request.client.host if request.client else "unknown"
+            key = f"{ip}:{request.method}:{request.url.path}"
+            if not _path_limiter.is_allowed(key, *limit_cfg):
                 return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
         return await call_next(request)
 
+
 app.add_middleware(PathRateLimitMiddleware)
 ```
+
+This avoids all slowapi private APIs. The `/ingest` per-user limit still uses slowapi via the route decorator (which has full public API access).
 
 - [ ] **Step 5: Add per-user rate limit to POST /ingest in ingestion/router.py**
 

@@ -26,7 +26,10 @@ async def reset_db():
 async def create_test_user(email: str, password: str, role: str) -> None:
     """Create a user directly in the DB with the specified role.
 
-    Bypasses the /auth/register endpoint (which now forces role=reader via on_after_register).
+    This is a plain module-level helper — NOT a pytest fixture. Always import it directly:
+        from tests.conftest import create_test_user
+
+    Bypasses the /auth/register endpoint (which forces role=reader via on_after_register).
     Use this in fixtures that need editor or admin access.
     """
     import auth.users  # noqa: F401 — ensures User model is registered with Base

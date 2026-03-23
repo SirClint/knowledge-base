@@ -1,5 +1,14 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from httpx import AsyncClient
+from main import app
+from tests.conftest import create_test_user
+
+
+@pytest.fixture
+async def client():
+    async with AsyncClient(app=app, base_url="http://test") as c:
+        yield c
 
 
 def _mock_session(existing_docs=None):
@@ -308,5 +317,20 @@ async def test_ingest_sets_needs_review_status_on_doc():
                 result = await ingest_message("something vague", session=_mock_session())
                 assert result["needs_review"] is True
                 assert mock_doc.status == "needs_review"
+
+
+# ── Role-based access control for POST /ingest ────────────────────────────────
+
+async def test_reader_cannot_ingest(client):
+    """Readers must receive 403 on POST /ingest."""
+    import auth.users  # noqa
+    from db.database import create_db
+    await create_db()
+    await create_test_user("reader@test.com", "Securepass1!", "reader")
+    r = await client.post("/auth/jwt/login", data={"username": "reader@test.com", "password": "Securepass1!"})
+    token = r.json()["access_token"]
+    r = await client.post("/ingest", json={"message": "test"},
+                          headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
 
 

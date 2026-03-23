@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from db.database import get_session
 from ingestion.service import ingest_message
-from auth.users import current_active_user
+from auth.users import current_active_user, require_editor
 from config import settings
 
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
@@ -35,7 +35,7 @@ def _verify_mailgun_signature(signing_key: str, timestamp: str, token: str, sign
 
 
 @router.post("")
-async def ingest(payload: IngestPayload, session=Depends(get_session), user=Depends(current_active_user)):
+async def ingest(payload: IngestPayload, session=Depends(get_session), user=Depends(require_editor)):
     try:
         result = await ingest_message(payload.message, session, owner=user.email)
         return result

@@ -4,6 +4,7 @@ from db.database import create_db
 from config import settings
 from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from fastapi.middleware.cors import CORSMiddleware
 
 scheduler = AsyncIOScheduler()
 
@@ -25,6 +26,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Knowledge Base API", lifespan=lifespan, docs_url="/api-docs", redoc_url="/api-redoc")
+
+# ── CORS Policy ────────────────────────────────────────────────────────────────
+origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 # ── Auth routes ───────────────────────────────────────────────────────────────

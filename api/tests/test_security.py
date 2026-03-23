@@ -22,6 +22,13 @@ def test_changeme_secret_key_raises_on_startup(monkeypatch):
 
 
 @pytest.fixture
+async def client():
+    """Unauthenticated client for testing CORS and other public endpoints."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+
+
+@pytest.fixture
 async def editor_client():
     try:
         await create_test_user("editor@test.com", "Securepass1!", "editor")
@@ -62,3 +69,21 @@ async def test_path_traversal_update_blocked(editor_client):
     """
     r = await editor_client.put("/docs/%2e%2e/%2e%2e/etc/shadow", json={"title": "x"})
     assert r.status_code == 400
+
+
+async def test_cors_allowed_origin(client):
+    """Requests from allowed origin include CORS headers."""
+    r = await client.options("/health", headers={
+        "Origin": "http://localhost:8080",
+        "Access-Control-Request-Method": "GET",
+    })
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:8080"
+
+
+async def test_cors_disallowed_origin(client):
+    """Requests from unknown origin do not get CORS allow header."""
+    r = await client.options("/health", headers={
+        "Origin": "http://evil.example.com",
+        "Access-Control-Request-Method": "GET",
+    })
+    assert r.headers.get("access-control-allow-origin") != "http://evil.example.com"

@@ -1,10 +1,13 @@
 import hmac
 import hashlib
 import time
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import datetime, timedelta
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 import jwt
-from db.database import get_session
+from sqlalchemy import delete
+from db.database import get_session, async_session_maker
+from db.models import UsedToken
 from ingestion.service import ingest_message
 from auth.users import current_active_user, require_editor
 from config import settings
@@ -67,8 +70,16 @@ async def ingest(request: Request, payload: IngestPayload, session=Depends(get_s
         raise HTTPException(status_code=503, detail=f"AI processing failed: {e}")
 
 
+async def _prune_used_tokens():
+    """Prune tokens older than 24 hours. Uses its own session."""
+    cutoff = datetime.utcnow() - timedelta(hours=24)
+    async with async_session_maker() as session:
+        await session.execute(delete(UsedToken).where(UsedToken.used_at < cutoff))
+        await session.commit()
+
+
 @router.post("/email")
-async def ingest_email(request: Request, session=Depends(get_session)):
+async def ingest_email(request: Request, background_tasks: BackgroundTasks, session=Depends(get_session)):
     form = await request.form()
     timestamp = form.get("timestamp", "")
     token = form.get("token", "")
@@ -76,6 +87,10 @@ async def ingest_email(request: Request, session=Depends(get_session)):
     sender = form.get("sender", "")
     subject = form.get("subject", "")
     body_plain = form.get("body-plain", "")
+
+    # Check body size cap early, before signature verification
+    if len(body_plain) > 50_000:
+        raise HTTPException(status_code=413, detail="Email body too large")
 
     # Verify Mailgun signature
     if not _verify_mailgun_signature(settings.mailgun_webhook_signing_key, timestamp, token, signature):
@@ -85,6 +100,15 @@ async def ingest_email(request: Request, session=Depends(get_session)):
     whitelist = [e.strip().lower() for e in settings.ingest_email_whitelist.split(",") if e.strip()]
     if not whitelist or sender.lower() not in whitelist:
         raise HTTPException(status_code=403, detail="Sender not authorized")
+
+    # Token deduplication
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    existing = await session.get(UsedToken, token_hash)
+    if existing:
+        raise HTTPException(status_code=403, detail="Duplicate request")
+    session.add(UsedToken(token_hash=token_hash))
+    await session.commit()
+    background_tasks.add_task(_prune_used_tokens)
 
     # Combine subject + body and pass through existing AI ingestion pipeline
     message = f"{subject}\n\n{body_plain}".strip() if subject else body_plain

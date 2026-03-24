@@ -49,3 +49,10 @@ class Setting(Base):
 
     key = Column(String, primary_key=True)
     value = Column(String, nullable=False)
+
+
+class UsedToken(Base):
+    __tablename__ = "used_tokens"
+
+    token_hash = Column(String(64), primary_key=True)  # SHA-256 hex, fixed 64 chars
+    used_at = Column(DateTime, server_default=func.now())

@@ -1,4 +1,5 @@
 import time
+import urllib.parse
 from collections import defaultdict
 from fastapi import FastAPI, Depends
 from contextlib import asynccontextmanager
@@ -86,6 +87,43 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(PathRateLimitMiddleware)
+
+
+class LoginFailureAuditMiddleware(BaseHTTPMiddleware):
+    """Intercepts failed login responses (HTTP 400) and writes audit.login_failure events.
+
+    IMPORTANT: request.body() must be called BEFORE call_next() to populate Starlette's
+    body cache. If called after, the receive stream is already exhausted by the route
+    handler and the body read will return empty bytes in production (real HTTP).
+    """
+
+    async def dispatch(self, request, call_next):
+        # Buffer the body BEFORE dispatching to downstream handler
+        if request.method == "POST" and request.url.path == "/auth/jwt/login":
+            await request.body()  # populates internal cache; downstream can still read it
+
+        response = await call_next(request)
+
+        if request.method == "POST" and request.url.path == "/auth/jwt/login" and response.status_code == 400:
+            try:
+                body = await request.body()  # safe: reads from cache populated above
+                parsed = urllib.parse.parse_qs(body.decode())
+                # fastapi-users uses 'username' field for the email address
+                raw_email = parsed.get("username", ["unknown"])
+                email = urllib.parse.unquote_plus(raw_email[0]) if raw_email else "unknown"
+            except Exception:
+                email = "unknown"
+
+            ip = request.client.host if request.client else None
+            from db.database import async_session_maker
+            from audit.service import log_event
+            async with async_session_maker() as session:
+                await log_event(session, actor_email=email, action="auth.login_failure", ip=ip)
+
+        return response
+
+
+app.add_middleware(LoginFailureAuditMiddleware)
 
 # ── CORS Policy ────────────────────────────────────────────────────────────────
 origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]

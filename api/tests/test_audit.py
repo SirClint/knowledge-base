@@ -96,3 +96,51 @@ async def test_log_event_writes_to_db(editor_client):
         assert row is not None
         assert row.actor_email == "test@test.com"
         assert row.target == "some/doc.md"
+
+
+async def test_login_failure_logged(client):
+    """Failed login attempt writes an auth.login_failure audit event."""
+    from db.database import async_session_maker, create_db
+    from db.models import AuditLog
+    from sqlalchemy import select
+    import auth.users  # noqa
+
+    await create_db()
+    await client.post("/auth/jwt/login", data={
+        "username": "nonexistent@example.com",
+        "password": "wrongpassword",
+    })
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(AuditLog).where(AuditLog.action == "auth.login_failure")
+        )
+        row = result.scalar_one_or_none()
+        assert row is not None
+        assert row.actor_email == "nonexistent@example.com"
+
+
+async def test_admin_audit_log_endpoint(editor_client):
+    """GET /admin/audit-log returns audit events (admin only)."""
+    from tests.conftest import create_test_user
+    from db.database import create_db
+    import auth.users  # noqa
+    from httpx import AsyncClient, ASGITransport
+    from main import app
+
+    await create_db()
+    await create_test_user("audit_admin@test.com", "Securepass1!", "admin")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/auth/jwt/login", data={"username": "audit_admin@test.com", "password": "Securepass1!"})
+        token = r.json()["access_token"]
+        r = await c.get("/admin/audit-log", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        data = r.json()
+        assert "items" in data
+        assert "total" in data
+
+
+async def test_admin_audit_log_requires_admin(editor_client):
+    """Non-admin users cannot access /admin/audit-log."""
+    r = await editor_client.get("/admin/audit-log")
+    assert r.status_code == 403

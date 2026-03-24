@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from db.database import get_session
@@ -130,3 +130,35 @@ async def delete_user(
     await session.delete(user)
     session.add(AuditLog(actor_email=current.email, action="user.delete", target=str(user_id)))
     await session.commit()
+
+
+@router.get("/audit-log")
+async def get_audit_log(
+    page: int = 1,
+    limit: int = 50,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(require_admin),
+):
+    offset = (page - 1) * limit
+    total = (await session.execute(select(func.count()).select_from(AuditLog))).scalar() or 0
+    result = await session.execute(
+        select(AuditLog).order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit)
+    )
+    items = result.scalars().all()
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "items": [
+            {
+                "id": row.id,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "actor_email": row.actor_email,
+                "action": row.action,
+                "target": row.target,
+                "detail": row.detail,
+                "ip_address": row.ip_address,
+            }
+            for row in items
+        ],
+    }

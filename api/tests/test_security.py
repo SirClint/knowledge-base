@@ -87,3 +87,31 @@ async def test_cors_disallowed_origin(client):
         "Access-Control-Request-Method": "GET",
     })
     assert r.headers.get("access-control-allow-origin") != "http://evil.example.com"
+
+
+async def test_api_docs_enabled_in_test_env(client):
+    """In test env (ENABLE_API_DOCS=true), /api-docs should return 200."""
+    # NOTE: This is a documentation stub — always passes and CANNOT be used as
+    # a failing-first TDD test. Skip the "verify fail" step for this test only.
+    # Production behavior (docs_url=None) verified manually:
+    #   curl http://localhost:8080/kms/api/api-docs → 404 (prod, ENABLE_API_DOCS not set)
+    r = await client.get("/api-docs")
+    assert r.status_code == 200
+
+
+async def test_health_summary_requires_auth(client):
+    """GET /health/summary is inaccessible without a JWT."""
+    r = await client.get("/health/summary")
+    assert r.status_code == 401
+
+
+async def test_health_ai_requires_auth(client):
+    """GET /health/ai is inaccessible without a JWT."""
+    r = await client.get("/health/ai")
+    assert r.status_code == 401
+
+
+async def test_health_liveness_is_public(client):
+    """GET /health (liveness) remains public."""
+    r = await client.get("/health")
+    assert r.status_code == 200

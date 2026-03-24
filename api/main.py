@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from contextlib import asynccontextmanager
 from db.database import create_db
 from config import settings
@@ -25,7 +25,12 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="Knowledge Base API", lifespan=lifespan, docs_url="/api-docs", redoc_url="/api-redoc")
+app = FastAPI(
+    title="Knowledge Base API",
+    lifespan=lifespan,
+    docs_url="/api-docs" if settings.enable_api_docs else None,
+    redoc_url="/api-redoc" if settings.enable_api_docs else None,
+)
 
 # ── CORS Policy ────────────────────────────────────────────────────────────────
 origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
@@ -39,7 +44,7 @@ app.add_middleware(
 
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
-from auth.users import fastapi_users, auth_backend, UserRead, UserCreate, UserUpdate
+from auth.users import fastapi_users, auth_backend, UserRead, UserCreate, UserUpdate, current_active_user
 
 app.include_router(
     fastapi_users.get_auth_router(auth_backend),
@@ -99,7 +104,7 @@ async def health():
 
 
 @app.get("/health/ai")
-async def health_ai():
+async def health_ai(user=Depends(current_active_user)):
     import httpx
     try:
         async with httpx.AsyncClient(timeout=3) as client:
@@ -112,7 +117,7 @@ async def health_ai():
 
 
 @app.get("/health/summary")
-async def health_summary():
+async def health_summary(user=Depends(current_active_user)):
     import httpx
     from sqlalchemy import select, func
     from db.models import Document

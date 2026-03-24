@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_version: str = "unknown"
     allowed_origins: str = "http://localhost:8080,http://localhost:8081"
     enable_api_docs: bool = False
+    rate_limit_enabled: bool = True  # Set to false in test env to avoid clobbering test fixtures
 
     @model_validator(mode="after")
     def validate_secret_key(self) -> "Settings":

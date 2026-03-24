@@ -1,3 +1,5 @@
+import time
+from collections import defaultdict
 from fastapi import FastAPI, Depends
 from contextlib import asynccontextmanager
 from db.database import create_db
@@ -5,6 +7,8 @@ from config import settings
 from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 scheduler = AsyncIOScheduler()
 
@@ -31,6 +35,57 @@ app = FastAPI(
     docs_url="/api-docs" if settings.enable_api_docs else None,
     redoc_url="/api-redoc" if settings.enable_api_docs else None,
 )
+
+# ── Rate Limiting ──────────────────────────────────────────────────────────────
+from limiter import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+
+class _SimpleRateLimiter:
+    """Thread-safe in-memory rate limiter for per-IP, per-path limiting."""
+
+    # (method, path) → (max_requests, window_seconds)
+    LIMITS: dict[tuple[str, str], tuple[int, int]] = {
+        ("POST", "/auth/jwt/login"): (10, 60),
+        ("POST", "/auth/register"): (5, 60),
+        ("POST", "/ingest/email"): (20, 60),
+    }
+
+    def __init__(self):
+        self._log: dict[str, list[float]] = defaultdict(list)
+
+    def is_allowed(self, key: str, max_req: int, window: int) -> bool:
+        now = time.monotonic()
+        times = [t for t in self._log[key] if now - t < window]
+        self._log[key] = times
+        if len(times) >= max_req:
+            return False
+        self._log[key].append(now)
+        return True
+
+
+_path_limiter = _SimpleRateLimiter()
+
+
+class PathRateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if not settings.rate_limit_enabled:
+            return await call_next(request)
+        limit_cfg = _SimpleRateLimiter.LIMITS.get((request.method, request.url.path))
+        if limit_cfg:
+            ip = request.client.host if request.client else "unknown"
+            key = f"{ip}:{request.method}:{request.url.path}"
+            if not _path_limiter.is_allowed(key, *limit_cfg):
+                return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+        return await call_next(request)
+
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(PathRateLimitMiddleware)
 
 # ── CORS Policy ────────────────────────────────────────────────────────────────
 origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]

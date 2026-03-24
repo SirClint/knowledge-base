@@ -3,10 +3,27 @@ import hashlib
 import time
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+import jwt as pyjwt
 from db.database import get_session
 from ingestion.service import ingest_message
 from auth.users import current_active_user, require_editor
 from config import settings
+from slowapi.util import get_remote_address
+from limiter import limiter  # MUST import from limiter.py, NOT from main (avoids circular import)
+
+
+def _key_by_user(request: Request) -> str:
+    """Rate-limit /ingest per authenticated user, falling back to IP."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth.removeprefix("Bearer ")
+        try:
+            payload = pyjwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            return payload.get("sub") or get_remote_address(request)
+        except pyjwt.PyJWTError:
+            pass
+    return get_remote_address(request)
+
 
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
 
@@ -35,7 +52,8 @@ def _verify_mailgun_signature(signing_key: str, timestamp: str, token: str, sign
 
 
 @router.post("")
-async def ingest(payload: IngestPayload, session=Depends(get_session), user=Depends(require_editor)):
+@limiter.limit("30/minute", key_func=_key_by_user)
+async def ingest(request: Request, payload: IngestPayload, session=Depends(get_session), user=Depends(require_editor)):
     try:
         result = await ingest_message(payload.message, session, owner=user.email)
         return result

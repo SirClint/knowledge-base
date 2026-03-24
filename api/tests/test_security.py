@@ -115,3 +115,60 @@ async def test_health_liveness_is_public(client):
     """GET /health (liveness) remains public."""
     r = await client.get("/health")
     assert r.status_code == 200
+
+
+async def test_path_rate_limit_login_enforced(client):
+    """POST /auth/jwt/login is rate-limited to 10 requests/min per IP by PathRateLimitMiddleware."""
+    import config
+    from main import _path_limiter, _SimpleRateLimiter
+    # Temporarily enable rate limiting (disabled globally in test env to avoid fixture conflicts)
+    original = config.settings.rate_limit_enabled
+    config.settings.rate_limit_enabled = True
+    # Clear any cached log entries for this path/IP so the counter starts fresh
+    _path_limiter._log.clear()
+    try:
+        # First 10 requests should pass (fail with 422/400/401, not 429)
+        for _ in range(10):
+            r = await client.post("/auth/jwt/login", data={
+                "username": "noone@test.com",
+                "password": "wrongpass",
+            })
+            assert r.status_code != 429, f"Should not be rate-limited yet, got {r.status_code}"
+        # 11th request should be rate-limited
+        r = await client.post("/auth/jwt/login", data={
+            "username": "noone@test.com",
+            "password": "wrongpass",
+        })
+        assert r.status_code == 429
+    finally:
+        config.settings.rate_limit_enabled = original
+        _path_limiter._log.clear()
+
+
+async def test_path_rate_limit_register_enforced(client):
+    """POST /auth/register is rate-limited to 5 requests/min per IP by PathRateLimitMiddleware."""
+    import config
+    from main import _path_limiter
+    # Temporarily enable rate limiting (disabled globally in test env to avoid fixture conflicts)
+    original = config.settings.rate_limit_enabled
+    config.settings.rate_limit_enabled = True
+    _path_limiter._log.clear()
+    try:
+        # First 5 requests should pass (fail with 422/400, not 429)
+        for _ in range(5):
+            r = await client.post("/auth/register", json={
+                "email": "spam@test.com",
+                "password": "Securepass1!",
+                "role": "reader",
+            })
+            assert r.status_code != 429, f"Should not be rate-limited yet, got {r.status_code}"
+        # 6th request should be rate-limited
+        r = await client.post("/auth/register", json={
+            "email": "spam@test.com",
+            "password": "Securepass1!",
+            "role": "reader",
+        })
+        assert r.status_code == 429
+    finally:
+        config.settings.rate_limit_enabled = original
+        _path_limiter._log.clear()

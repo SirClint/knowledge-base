@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from db.database import get_session
 from auth.users import User, require_admin, get_user_manager
+from audit.service import log_event
 from db.models import Setting
 
 SETTING_DEFAULTS = {"semantic_threshold": "0.50"}
@@ -91,6 +92,7 @@ async def change_role(
     user.role = body.role
     await session.commit()
     await session.refresh(user)
+    await log_event(session, actor_email=current.email, action="user.role_change", target=str(user_id), detail=body.role)
     return {"id": str(user.id), "email": user.email, "role": user.role, "is_active": user.is_active}
 
 
@@ -110,6 +112,7 @@ async def reset_password(
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     user.hashed_password = user_manager.password_helper.hash(stripped)
     await session.commit()
+    await log_event(session, actor_email=_admin.email, action="user.password_reset", target=str(user_id))
     return {"ok": True}
 
 
@@ -126,3 +129,4 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     await session.delete(user)
     await session.commit()
+    await log_event(session, actor_email=current.email, action="user.delete", target=str(user_id))

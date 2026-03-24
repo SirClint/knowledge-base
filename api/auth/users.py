@@ -54,6 +54,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if user.role != "reader":
             await self.user_db.update(user, {"role": "reader"})
 
+    async def on_after_login(self, user: User, request=None, response=None):
+        from db.database import async_session_maker
+        from audit.service import log_event
+        ip = request.client.host if request and request.client else None
+        async with async_session_maker() as session:
+            await log_event(session, actor_email=user.email, action="auth.login_success", ip=ip)
+
 
 async def get_user_manager(user_db=Depends(get_user_db)):
     yield UserManager(user_db)

@@ -110,6 +110,16 @@ async def ingest_email(request: Request, background_tasks: BackgroundTasks, sess
     await session.commit()
     background_tasks.add_task(_prune_used_tokens)
 
+    import json as _json
+    from audit.service import log_event as _log_event
+    await _log_event(
+        session,
+        actor_email="anonymous",
+        action="ingest.email",
+        target=sender,
+        detail=_json.dumps({"subject": subject[:200]}),  # subject only, never body
+    )
+
     # Combine subject + body and pass through existing AI ingestion pipeline
     message = f"{subject}\n\n{body_plain}".strip() if subject else body_plain
     try:

@@ -1,10 +1,11 @@
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from db.database import get_session
 from db.models import Document
 from docs_.service import create_doc, get_doc, update_doc, delete_doc, _safe_path
 from auth.users import require_editor, require_admin, current_active_user
+from audit.service import log_event
 from config import settings
 from ai.service import KNOWN_FOLDERS
 import frontmatter
@@ -28,9 +29,11 @@ class DocUpdate(BaseModel):
 
 
 @router.post("", status_code=201)
-async def create(payload: DocCreate, session=Depends(get_session), user=Depends(require_editor)):
+async def create(request: Request, payload: DocCreate, session=Depends(get_session), user=Depends(require_editor)):
     owner = payload.owner or user.email
     doc = await create_doc(payload.path, payload.title, payload.body, payload.tags, owner, session)
+    await log_event(session, actor_email=user.email, action="doc.create",
+                    target=payload.path, ip=request.client.host if request.client else None)
     return {"id": doc.id, "title": doc.title, "path": doc.path}
 
 
@@ -70,17 +73,21 @@ async def read(path: str, session=Depends(get_session), user=Depends(current_act
 
 
 @router.put("/{path:path}", dependencies=[Depends(require_editor)])
-async def update(path: str, payload: DocUpdate, session=Depends(get_session), user=Depends(current_active_user)):
+async def update(request: Request, path: str, payload: DocUpdate, session=Depends(get_session), user=Depends(current_active_user)):
     updates = payload.model_dump(exclude_none=True)
     doc = await update_doc(path, updates, session, saved_by=user.email)
     if not doc:
         raise HTTPException(404)
+    await log_event(session, actor_email=user.email, action="doc.update",
+                    target=path, ip=request.client.host if request.client else None)
     return doc
 
 
-@router.delete("/{path:path}", dependencies=[Depends(require_admin)])
-async def delete(path: str, session=Depends(get_session)):
+@router.delete("/{path:path}")
+async def delete(request: Request, path: str, session=Depends(get_session), user=Depends(require_admin)):
     ok = await delete_doc(path, session)
     if not ok:
         raise HTTPException(404)
+    await log_event(session, actor_email=user.email, action="doc.delete",
+                    target=path, ip=request.client.host if request.client else None)
     return {"deleted": True}

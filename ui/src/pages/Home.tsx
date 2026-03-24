@@ -87,7 +87,12 @@ export default function Home() {
         <h1 style={{ margin: 0 }}>Knowledge Base</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => navigate("/doc/new")}>+ Ingest</button>
-          <button onClick={() => navigate("/review")}>Review Queue</button>
+          <button
+            title="Shows documents flagged for review — either AI-ingested content that needs a human check, or documents overdue for their scheduled review interval. Click to view the queue and mark items as reviewed."
+            onClick={() => navigate("/review")}
+          >
+            Review Queue
+          </button>
         </div>
       </div>
 
@@ -168,6 +173,7 @@ export default function Home() {
       </div>
       {showAbout && (
         <div
+          data-testid="about-backdrop"
           onClick={() => setShowAbout(false)}
           style={{
             position: "fixed", inset: 0,
@@ -207,6 +213,34 @@ export default function Home() {
                 <li><strong>Backend:</strong> FastAPI, Python, SQLite, ChromaDB, Ollama</li>
                 <li><strong>Infra:</strong> Docker, Caddy, Nginx</li>
               </ul>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <strong>What this app does</strong>
+              <ul
+                data-testid="about-feature-list"
+                style={{ margin: "8px 0 0", paddingLeft: 20, fontSize: 13 }}
+              >
+                <li>Store and organize markdown documents in folders</li>
+                <li>AI-powered ingestion: paste content, AI classifies and files it automatically</li>
+                <li>Full-text and semantic search across all documents</li>
+                <li>Version history with the ability to restore any prior version</li>
+                <li>Review queue for stale or AI-created content that needs a human check</li>
+                <li>Comments on documents</li>
+                <li>Email ingestion via Mailgun webhook</li>
+                <li>Admin user management (roles: reader, editor, admin)</li>
+              </ul>
+            </div>
+            <div style={{ marginTop: 12, fontSize: 13 }}>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowAbout(false);
+                  navigate("/doc/docs/user-guide.md");
+                }}
+              >
+                Full details →
+              </a>
             </div>
           </div>
         </div>

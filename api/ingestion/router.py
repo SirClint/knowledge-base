@@ -3,7 +3,7 @@ import hashlib
 import time
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-import jwt as pyjwt
+import jwt
 from db.database import get_session
 from ingestion.service import ingest_message
 from auth.users import current_active_user, require_editor
@@ -18,14 +18,18 @@ def _key_by_user(request: Request) -> str:
     if auth.startswith("Bearer "):
         token = auth.removeprefix("Bearer ")
         try:
-            payload = pyjwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
             return payload.get("sub") or get_remote_address(request)
-        except pyjwt.PyJWTError:
+        except jwt.PyJWTError:
             pass
     return get_remote_address(request)
 
 
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
+
+# NOTE: The @limiter.limit decorator below is always active regardless of settings.rate_limit_enabled.
+# The PathRateLimitMiddleware in main.py checks rate_limit_enabled, but slowapi decorators
+# on individual routes do not. This means /ingest per-user limit is always enforced.
 
 
 class IngestPayload(BaseModel):

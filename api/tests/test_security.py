@@ -172,3 +172,11 @@ async def test_path_rate_limit_register_enforced(client):
     finally:
         config.settings.rate_limit_enabled = original
         _path_limiter._log.clear()
+
+
+def test_slowapi_is_wired_to_app():
+    """Verify slowapi Limiter instance is registered on app.state."""
+    from main import app
+    from slowapi import Limiter
+    assert hasattr(app.state, "limiter")
+    assert isinstance(app.state.limiter, Limiter)

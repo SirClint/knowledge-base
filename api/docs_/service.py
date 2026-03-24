@@ -5,10 +5,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from db.models import Document
 from config import settings
+from fastapi import HTTPException
 import frontmatter
 
 
+def _safe_path(path: str) -> Path:
+    """Resolve path against vault root and reject any traversal outside it.
+
+    Two-layer defence:
+    1. Reject any path that contains a '..' segment in the raw string (catches
+       payloads in JSON request bodies before they reach the filesystem).
+    2. Resolve the full path and confirm it stays inside the vault root
+       (catches edge cases like symlinks or alternate traversal encodings).
+    Uses is_relative_to (Python 3.9+) to avoid the startswith prefix-bypass bug:
+    e.g. vault=/data/vault would incorrectly allow /data/vault-escape with startswith.
+    """
+    # Reject raw traversal sequences in the path string
+    parts = Path(path).parts
+    if ".." in parts:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    vault_root = Path(settings.vault_path).resolve()
+    resolved = (vault_root / path).resolve()
+    if not resolved.is_relative_to(vault_root):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    return resolved
+
+
 async def write_doc_file(path: str, title: str, body: str, meta: dict):
+    _safe_path(path)
     full_path = Path(settings.vault_path) / path
     full_path.parent.mkdir(parents=True, exist_ok=True)
     post = frontmatter.Post(body, **{"title": title, **meta})
@@ -32,11 +56,13 @@ async def create_doc(path: str, title: str, body: str, tags: list, owner: str, s
 
 
 async def get_doc(path: str, session: AsyncSession) -> Document | None:
+    _safe_path(path)
     result = await session.execute(select(Document).where(Document.path == path))
     return result.scalar_one_or_none()
 
 
 async def update_doc(path: str, updates: dict, session: AsyncSession, saved_by: str = "") -> Document | None:
+    _safe_path(path)
     doc = await get_doc(path, session)
     if not doc:
         return None
@@ -86,6 +112,7 @@ async def update_doc(path: str, updates: dict, session: AsyncSession, saved_by: 
 
 
 async def delete_doc(path: str, session: AsyncSession) -> bool:
+    _safe_path(path)
     doc = await get_doc(path, session)
     if not doc:
         return False

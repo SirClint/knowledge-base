@@ -48,7 +48,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     verification_token_secret = SECRET
 
     async def on_after_register(self, user: User, request=None):
-        pass
+        # Force role to reader regardless of submitted value.
+        # user is a detached instance at this point — use self.user_db.update()
+        # which acquires the correct session from the DI-managed user_db adapter.
+        if user.role != "reader":
+            await self.user_db.update(user, {"role": "reader"})
+
+    async def on_after_login(self, user: User, request=None, response=None):
+        from db.database import async_session_maker
+        from audit.service import log_event
+        ip = request.client.host if request and request.client else None
+        async with async_session_maker() as session:
+            await log_event(session, actor_email=user.email, action="auth.login_success", ip=ip)
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):

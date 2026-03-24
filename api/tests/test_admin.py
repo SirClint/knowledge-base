@@ -1,35 +1,43 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from main import app
+from tests.conftest import create_test_user
 
 
-async def _make_client_with_role(role: str):
-    """Helper: returns (client, token) for a registered user with given role."""
+async def _upsert_user(email: str, password: str, role: str) -> None:
+    """Delete any existing user with this email then recreate with the specified role/password."""
     import auth.users  # noqa: F401
-    from db.database import create_db
-    await create_db()
-    transport = ASGITransport(app=app)
-    c = AsyncClient(transport=transport, base_url="http://test")
-    email = f"{role}@test.com"
-    await c.post("/auth/register", json={"email": email, "password": "pass", "role": role})
-    r = await c.post("/auth/jwt/login", data={"username": email, "password": "pass"})
-    token = r.json()["access_token"]
-    c.headers["Authorization"] = f"Bearer {token}"
-    return c
+    from db.database import async_session_maker
+    from auth.users import User
+    from sqlalchemy import delete
+    async with async_session_maker() as session:
+        await session.execute(delete(User).where(User.email == email))
+        await session.commit()
+    await create_test_user(email, password, role)
 
 
 @pytest.fixture
 async def admin_client():
-    c = await _make_client_with_role("admin")
-    yield c
-    await c.aclose()
+    import auth.users  # noqa: F401
+    from db.database import create_db
+    await create_db()
+    await _upsert_user("admin@test.com", "Securepass1!", "admin")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/auth/jwt/login", data={"username": "admin@test.com", "password": "Securepass1!"})
+        c.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
+        yield c
 
 
 @pytest.fixture
 async def reader_client():
-    c = await _make_client_with_role("reader")
-    yield c
-    await c.aclose()
+    import auth.users  # noqa: F401
+    from db.database import create_db
+    await create_db()
+    await _upsert_user("reader@test.com", "Securepass1!", "reader")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/auth/jwt/login", data={"username": "reader@test.com", "password": "Securepass1!"})
+        c.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
+        yield c
 
 
 async def test_list_users_as_admin(admin_client):

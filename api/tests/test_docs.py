@@ -1,18 +1,25 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from main import app
+from tests.conftest import create_test_user
 
 
 @pytest.fixture
 async def editor_client():
     import auth.users  # noqa: F401
     from db.database import create_db
+    from db.database import async_session_maker
+    from auth.users import User
+    from sqlalchemy import delete
     await create_db()
+    # Remove any stale user so create_test_user always inserts fresh with the correct password/role
+    async with async_session_maker() as session:
+        await session.execute(delete(User).where(User.email == "ed@test.com"))
+        await session.commit()
+    await create_test_user("ed@test.com", "Securepass1!", "editor")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        await c.post("/auth/register", json={"email": "ed@test.com", "password": "pass", "role": "editor"})
-        r = await c.post("/auth/jwt/login", data={"username": "ed@test.com", "password": "pass"})
-        token = r.json()["access_token"]
-        c.headers["Authorization"] = f"Bearer {token}"
+        r = await c.post("/auth/jwt/login", data={"username": "ed@test.com", "password": "Securepass1!"})
+        c.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
         yield c
 
 

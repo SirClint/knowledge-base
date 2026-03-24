@@ -48,3 +48,53 @@ async def test_reader_cannot_create(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 403
+
+
+async def test_register_as_admin_gets_reader(client):
+    """Submitting role=admin at registration must produce a reader."""
+    r = await client.post("/auth/register", json={
+        "email": "wannabe_admin@example.com",
+        "password": "Securepass1!",
+        "role": "admin",
+    })
+    assert r.status_code == 201
+
+    # Confirm the DB row has role='reader', not the submitted role
+    from db.database import async_session_maker
+    from auth.users import User
+    from sqlalchemy import select
+    async with async_session_maker() as session:
+        result = await session.execute(select(User).where(User.email == "wannabe_admin@example.com"))
+        db_user = result.scalar_one()
+        assert db_user.role == "reader", f"Expected role=reader, got {db_user.role!r}"
+
+    login = await client.post("/auth/jwt/login", data={
+        "username": "wannabe_admin@example.com",
+        "password": "Securepass1!",
+    })
+    token = login.json()["access_token"]
+
+    # Try an admin action — must fail with 403
+    r = await client.get("/admin/users", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
+
+
+async def test_register_as_editor_gets_reader(client):
+    """Submitting role=editor at registration must produce a reader."""
+    r = await client.post("/auth/register", json={
+        "email": "wannabe_editor@example.com",
+        "password": "Securepass1!",
+        "role": "editor",
+    })
+    assert r.status_code == 201
+
+    login = await client.post("/auth/jwt/login", data={
+        "username": "wannabe_editor@example.com",
+        "password": "Securepass1!",
+    })
+    token = login.json()["access_token"]
+
+    # Try an editor action — must fail with 403
+    r = await client.post("/docs", json={"title": "T", "path": "x.md", "body": "b", "tags": []},
+                          headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403

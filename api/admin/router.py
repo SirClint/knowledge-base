@@ -1,11 +1,12 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from db.database import get_session
 from auth.users import User, require_admin, get_user_manager
-from db.models import Setting
+from audit.service import log_event
+from db.models import Setting, AuditLog
 
 SETTING_DEFAULTS = {"semantic_threshold": "0.50"}
 ALLOWED_SETTINGS = set(SETTING_DEFAULTS.keys())
@@ -89,6 +90,7 @@ async def change_role(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.role = body.role
+    session.add(AuditLog(actor_email=current.email, action="user.role_change", target=str(user_id), detail=body.role))
     await session.commit()
     await session.refresh(user)
     return {"id": str(user.id), "email": user.email, "role": user.role, "is_active": user.is_active}
@@ -109,6 +111,7 @@ async def reset_password(
     if len(stripped) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     user.hashed_password = user_manager.password_helper.hash(stripped)
+    session.add(AuditLog(actor_email=_admin.email, action="user.password_reset", target=str(user_id)))
     await session.commit()
     return {"ok": True}
 
@@ -125,4 +128,37 @@ async def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     await session.delete(user)
+    session.add(AuditLog(actor_email=current.email, action="user.delete", target=str(user_id)))
     await session.commit()
+
+
+@router.get("/audit-log")
+async def get_audit_log(
+    page: int = 1,
+    limit: int = 50,
+    session: AsyncSession = Depends(get_session),
+    _: User = Depends(require_admin),
+):
+    offset = (page - 1) * limit
+    total = (await session.execute(select(func.count()).select_from(AuditLog))).scalar() or 0
+    result = await session.execute(
+        select(AuditLog).order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit)
+    )
+    items = result.scalars().all()
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "items": [
+            {
+                "id": row.id,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "actor_email": row.actor_email,
+                "action": row.action,
+                "target": row.target,
+                "detail": row.detail,
+                "ip_address": row.ip_address,
+            }
+            for row in items
+        ],
+    }

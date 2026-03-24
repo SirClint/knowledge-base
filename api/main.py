@@ -1,9 +1,15 @@
-from fastapi import FastAPI
+import time
+import urllib.parse
+from collections import defaultdict
+from fastapi import FastAPI, Depends
 from contextlib import asynccontextmanager
 from db.database import create_db
 from config import settings
 from pathlib import Path
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 scheduler = AsyncIOScheduler()
 
@@ -24,11 +30,114 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="Knowledge Base API", lifespan=lifespan, docs_url="/api-docs", redoc_url="/api-redoc")
+app = FastAPI(
+    title="Knowledge Base API",
+    lifespan=lifespan,
+    docs_url="/api-docs" if settings.enable_api_docs else None,
+    redoc_url="/api-redoc" if settings.enable_api_docs else None,
+)
+
+# ── Rate Limiting ──────────────────────────────────────────────────────────────
+from limiter import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+
+class _SimpleRateLimiter:
+    """Thread-safe in-memory rate limiter for per-IP, per-path limiting."""
+
+    # (method, path) → (max_requests, window_seconds)
+    LIMITS: dict[tuple[str, str], tuple[int, int]] = {
+        ("POST", "/auth/jwt/login"): (10, 60),
+        ("POST", "/auth/register"): (5, 60),
+        ("POST", "/ingest/email"): (20, 60),
+    }
+
+    def __init__(self):
+        self._log: dict[str, list[float]] = defaultdict(list)
+
+    def is_allowed(self, key: str, max_req: int, window: int) -> bool:
+        now = time.monotonic()
+        times = [t for t in self._log[key] if now - t < window]
+        self._log[key] = times
+        if len(times) >= max_req:
+            return False
+        self._log[key].append(now)
+        return True
+
+
+_path_limiter = _SimpleRateLimiter()
+
+
+class PathRateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if not settings.rate_limit_enabled:
+            return await call_next(request)
+        limit_cfg = _SimpleRateLimiter.LIMITS.get((request.method, request.url.path))
+        if limit_cfg:
+            ip = request.client.host if request.client else "unknown"
+            key = f"{ip}:{request.method}:{request.url.path}"
+            if not _path_limiter.is_allowed(key, *limit_cfg):
+                return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+        return await call_next(request)
+
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(PathRateLimitMiddleware)
+
+
+class LoginFailureAuditMiddleware(BaseHTTPMiddleware):
+    """Intercepts failed login responses (HTTP 400) and writes audit.login_failure events.
+
+    IMPORTANT: request.body() must be called BEFORE call_next() to populate Starlette's
+    body cache. If called after, the receive stream is already exhausted by the route
+    handler and the body read will return empty bytes in production (real HTTP).
+    """
+
+    async def dispatch(self, request, call_next):
+        # Buffer the body BEFORE dispatching to downstream handler
+        if request.method == "POST" and request.url.path == "/auth/jwt/login":
+            await request.body()  # populates internal cache; downstream can still read it
+
+        response = await call_next(request)
+
+        if request.method == "POST" and request.url.path == "/auth/jwt/login" and response.status_code == 400:
+            try:
+                body = await request.body()  # safe: reads from cache populated above
+                parsed = urllib.parse.parse_qs(body.decode())
+                # fastapi-users uses 'username' field for the email address
+                raw_email = parsed.get("username", ["unknown"])
+                email = urllib.parse.unquote_plus(raw_email[0]) if raw_email else "unknown"
+            except Exception:
+                email = "unknown"
+
+            ip = request.client.host if request.client else None
+            from db.database import async_session_maker
+            from audit.service import log_event
+            async with async_session_maker() as session:
+                await log_event(session, actor_email=email, action="auth.login_failure", ip=ip)
+
+        return response
+
+
+app.add_middleware(LoginFailureAuditMiddleware)
+
+# ── CORS Policy ────────────────────────────────────────────────────────────────
+origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
-from auth.users import fastapi_users, auth_backend, UserRead, UserCreate, UserUpdate
+from auth.users import fastapi_users, auth_backend, UserRead, UserCreate, UserUpdate, current_active_user
 
 app.include_router(
     fastapi_users.get_auth_router(auth_backend),
@@ -88,7 +197,7 @@ async def health():
 
 
 @app.get("/health/ai")
-async def health_ai():
+async def health_ai(user=Depends(current_active_user)):
     import httpx
     try:
         async with httpx.AsyncClient(timeout=3) as client:
@@ -101,7 +210,7 @@ async def health_ai():
 
 
 @app.get("/health/summary")
-async def health_summary():
+async def health_summary(user=Depends(current_active_user)):
     import httpx
     from sqlalchemy import select, func
     from db.models import Document

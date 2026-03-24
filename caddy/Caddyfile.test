@@ -1,4 +1,21 @@
 :8081 {
+    # TLS mode controlled by CADDY_TLS_MODE env var:
+    #   auto:     tls {$CADDY_EMAIL}    (Let's Encrypt, requires real domain)
+    #   internal: tls internal          (self-signed, LAN use)
+    #   off:      (omit tls line)       (plain HTTP, current default)
+
+    header {
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+        # HSTS: only uncomment when CADDY_TLS_MODE is auto or internal
+        # Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # CSP GATE: uncomment ONLY after the UI inline-style sweep (spec 1.12) is complete
+        # Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'"
+    }
+
     handle /kms/api/* {
         uri strip_prefix /kms/api
         reverse_proxy api:8000

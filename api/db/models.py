@@ -49,3 +49,22 @@ class Setting(Base):
 
     key = Column(String, primary_key=True)
     value = Column(String, nullable=False)
+
+
+class UsedToken(Base):
+    __tablename__ = "used_tokens"
+
+    token_hash = Column(String(64), primary_key=True)  # SHA-256 hex, fixed 64 chars
+    used_at = Column(DateTime, server_default=func.now())
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, server_default=func.now())
+    actor_email = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    target = Column(String, nullable=True)
+    detail = Column(String, nullable=True)  # freeform JSON string
+    ip_address = Column(String, nullable=True)

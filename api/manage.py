@@ -82,7 +82,7 @@ async def cmd_import_users(input_path: str):
     path = Path(input_path)
     if not path.exists():
         print(f"Warning: {input_path} not found. Skipping import.")
-        return None
+        return (0, 0)
 
     await create_db()
     data = json.loads(path.read_text())
@@ -91,21 +91,25 @@ async def cmd_import_users(input_path: str):
     skipped = 0
     async with async_session_maker() as session:
         for u in data:
-            result = await session.execute(select(User).where(User.email == u["email"]))
-            if result.scalar_one_or_none():
+            try:
+                result = await session.execute(select(User).where(User.email == u["email"]))
+                if result.scalar_one_or_none():
+                    skipped += 1
+                    continue
+                user = User(
+                    id=uuid_mod.UUID(u["id"]),
+                    email=u["email"],
+                    hashed_password=u["hashed_password"],
+                    role=u["role"],
+                    is_active=u["is_active"],
+                    is_superuser=u["is_superuser"],
+                    is_verified=u["is_verified"],
+                )
+                session.add(user)
+                imported += 1
+            except (KeyError, ValueError) as e:
+                print(f"Warning: skipping malformed record: {e}")
                 skipped += 1
-                continue
-            user = User(
-                id=uuid_mod.UUID(u["id"]),
-                email=u["email"],
-                hashed_password=u["hashed_password"],
-                role=u["role"],
-                is_active=u["is_active"],
-                is_superuser=u["is_superuser"],
-                is_verified=u["is_verified"],
-            )
-            session.add(user)
-            imported += 1
         await session.commit()
 
     print(f"Imported {imported} users, skipped {skipped} existing")

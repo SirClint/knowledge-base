@@ -125,7 +125,7 @@ async def test_import_users_missing_file(tmp_path):
 
     await create_db()
     result = await manage.cmd_import_users(str(tmp_path / "nonexistent.json"))
-    assert result is None
+    assert result == (0, 0)
 
 
 async def test_import_users_inserts_new_users(tmp_path):
@@ -158,3 +158,8 @@ async def test_import_users_inserts_new_users(tmp_path):
         user = result.scalar_one_or_none()
     assert user is not None
     assert user.role == "admin"
+
+    # Teardown: remove only the user created by this test
+    async with async_session_maker() as session:
+        await session.execute(delete(User).where(User.email == "manage-insert@example.com"))
+        await session.commit()

@@ -74,10 +74,10 @@ async def test_path_traversal_update_blocked(editor_client):
 async def test_cors_allowed_origin(client):
     """Requests from allowed origin include CORS headers."""
     r = await client.options("/health", headers={
-        "Origin": "http://localhost:8080",
+        "Origin": "http://localhost:8081",
         "Access-Control-Request-Method": "GET",
     })
-    assert r.headers.get("access-control-allow-origin") == "http://localhost:8080"
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:8081"
 
 
 async def test_cors_disallowed_origin(client):

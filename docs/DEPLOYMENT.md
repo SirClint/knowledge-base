@@ -80,7 +80,7 @@ feature branch → test environment → deploy-test → PR to main → deploy to
 
 ## Deploying to Production
 
-Run `./deploy.sh` from the project root. It enforces these four steps — **none can be skipped**:
+Run `./deploy.sh` from the project root. It enforces these six steps — **none can be skipped**:
 
 ### Step 1: Automatic backup
 `./backup.sh --env prod` runs automatically. It archives:
@@ -93,15 +93,21 @@ The archive is saved to `backups/YYYY-MM-DD-HHMMSS-prod.tar.gz`. If the backup f
 ### Step 2: Human confirmation
 You are shown the backup file path and asked to type `yes` to continue. Type anything else (or Ctrl+C) to abort — no changes have been made yet.
 
-### Step 3: Pull latest code
+### Step 3: Export user accounts
+All user accounts are exported to `/data/manage/users.json` inside the `kb_data` Docker volume. This file persists across image rebuilds and is used to restore accounts after the new containers start.
+
+### Step 4: Pull latest code
 `git pull origin main` fetches the latest merged code. If there are conflicts or the pull fails, the script aborts.
 
-### Step 4: Rebuild and restart
+### Step 5: Rebuild and restart
 ```
 docker compose build api ui
 docker compose up -d
 ```
 Both the API and UI containers are rebuilt from source, then restarted. The database and vault data are preserved (they live in Docker volumes and the `vault/` directory, not in the container images).
+
+### Step 6: Wait for API health and import user accounts
+The script polls the API health endpoint for up to 60 seconds. Once the API is healthy, it imports any users from the export file that don't already exist in the database. If the API never becomes healthy within the timeout, the script exits with an error and prints the recovery command to run the import manually.
 
 ---
 
@@ -140,6 +146,50 @@ docker run --rm \
 
 # 5. Restart
 ./start.sh
+```
+
+---
+
+## Account Management
+
+### Creating the initial admin account
+
+After a fresh install or if the database volume is wiped, no user accounts exist. Since the application locks self-registration to the `reader` role, you must create the first admin account from the command line:
+
+```bash
+# Test environment
+make create-admin email=your@email.com password=YourPassword
+
+# Production environment (make targets are test-only — run directly for prod)
+docker compose --env-file .env exec api python manage.py create-admin \
+  --email your@email.com --password YourPassword
+```
+
+If the account already exists, the command exits cleanly: `User already exists: <email>`.
+
+### Automatic account preservation during deploys
+
+Both `deploy.sh` and `deploy-test.sh` automatically preserve user accounts across image rebuilds:
+
+1. **Before rebuild** — exports all user accounts to `/data/manage/users.json` inside the data volume
+2. **After restart** — waits for the API to become healthy, then imports any users from the export file that don't already exist in the database
+
+This happens automatically on every deploy — no manual steps required. The export file survives image rebuilds because it lives inside the `kb_data` Docker volume, which is not removed during a normal deploy.
+
+> **Note:** This does not protect against Docker volume removal (`docker volume rm` or `docker compose down -v`). If a volume is wiped, restore from a `backup.sh` archive — see "Restoring from a backup" above.
+
+### Manual export and import
+
+To export or import users manually (e.g., to recover from an issue):
+
+```bash
+# Test environment
+make export-users    # writes /data/manage/users.json inside the container volume
+make import-users    # reads /data/manage/users.json, skips already-existing users
+
+# Production environment
+docker compose --env-file .env exec api python manage.py export-users --output /data/manage/users.json
+docker compose --env-file .env exec api python manage.py import-users --input /data/manage/users.json
 ```
 
 ---

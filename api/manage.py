@@ -8,6 +8,7 @@ Usage:
 """
 import argparse
 import asyncio
+import getpass
 import json
 import sys
 from pathlib import Path
@@ -40,6 +41,35 @@ async def cmd_create_admin(email: str, password: str) -> None:
         session.add(user)
         await session.commit()
     print(f"Admin created: {email}")
+
+
+async def cmd_reset_password(email: str, password: str, role: str | None = None) -> None:
+    import auth.users  # noqa: F401 — registers User with Base.metadata
+    from db.database import create_db, async_session_maker
+    from auth.users import User
+    from fastapi_users.password import PasswordHelper
+    from sqlalchemy import select, func
+
+    if len(password) < 8:
+        print("Password must be at least 8 characters")
+        sys.exit(1)
+
+    await create_db()
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(User).where(func.lower(User.email) == email.lower())
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            print(f"No user found with email: {email}")
+            sys.exit(1)
+        ph = PasswordHelper()
+        user.hashed_password = ph.hash(password)
+        if role is not None:
+            user.role = role
+        await session.commit()
+        await session.refresh(user)
+    print(f"Password reset for {user.email} (role: {user.role})")
 
 
 async def cmd_export_users(output: str) -> None:
@@ -130,6 +160,11 @@ def main() -> None:
     p_import = sub.add_parser("import-users", help="Import users from JSON (skips existing)")
     p_import.add_argument("--input", default="/data/manage/users.json")
 
+    p_reset = sub.add_parser("reset-password", help="Reset a user's password (prompts interactively)")
+    p_reset.add_argument("--email", required=True, help="Email address of the user to update")
+    p_reset.add_argument("--role", choices=["reader", "editor", "admin"], default=None,
+                         help="Optionally change the user's role")
+
     args = parser.parse_args()
 
     if args.command == "create-admin":
@@ -138,6 +173,13 @@ def main() -> None:
         asyncio.run(cmd_export_users(args.output))
     elif args.command == "import-users":
         asyncio.run(cmd_import_users(args.input))
+    elif args.command == "reset-password":
+        password = getpass.getpass("New password: ")
+        confirm = getpass.getpass("Confirm password: ")
+        if password != confirm:
+            print("Passwords do not match")
+            sys.exit(1)
+        asyncio.run(cmd_reset_password(args.email, password, args.role))
 
 
 if __name__ == "__main__":

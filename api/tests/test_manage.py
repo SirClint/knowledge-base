@@ -163,3 +163,94 @@ async def test_import_users_inserts_new_users(tmp_path):
     async with async_session_maker() as session:
         await session.execute(delete(User).where(User.email == "manage-insert@example.com"))
         await session.commit()
+
+
+async def test_reset_password_updates_hash():
+    import auth.users  # noqa: F401
+    from db.database import create_db, async_session_maker
+    from auth.users import User
+    from fastapi_users.password import PasswordHelper
+    from sqlalchemy import select
+    import manage
+
+    await create_db()
+    await manage.cmd_create_admin("manage-reset-hash@example.com", "oldpassword1")
+
+    await manage.cmd_reset_password("manage-reset-hash@example.com", "newpassword1")
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(User).where(User.email == "manage-reset-hash@example.com"))
+        user = result.scalar_one_or_none()
+
+    ph = PasswordHelper()
+    verified, _ = ph.verify_and_update("newpassword1", user.hashed_password)
+    assert verified is True
+    old_verified, _ = ph.verify_and_update("oldpassword1", user.hashed_password)
+    assert old_verified is False
+
+
+async def test_reset_password_with_role_change():
+    import auth.users  # noqa: F401
+    from db.database import create_db, async_session_maker
+    from auth.users import User
+    from fastapi_users.password import PasswordHelper
+    from sqlalchemy import select
+    import manage
+
+    await create_db()
+    await manage.cmd_create_admin("manage-reset-role@example.com", "oldpassword1")
+
+    await manage.cmd_reset_password("manage-reset-role@example.com", "newpassword1", role="reader")
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(User).where(User.email == "manage-reset-role@example.com"))
+        user = result.scalar_one_or_none()
+
+    assert user.role == "reader"
+    ph = PasswordHelper()
+    verified, _ = ph.verify_and_update("newpassword1", user.hashed_password)
+    assert verified is True
+
+
+async def test_reset_password_keeps_role_when_not_specified():
+    import auth.users  # noqa: F401
+    from db.database import create_db, async_session_maker
+    from auth.users import User
+    from sqlalchemy import select
+    import manage
+
+    await create_db()
+    await manage.cmd_create_admin("manage-reset-keeprole@example.com", "oldpassword1")
+
+    await manage.cmd_reset_password("manage-reset-keeprole@example.com", "newpassword1")
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(User).where(User.email == "manage-reset-keeprole@example.com"))
+        user = result.scalar_one_or_none()
+
+    assert user.role == "admin"
+
+
+async def test_reset_password_user_not_found():
+    import auth.users  # noqa: F401
+    from db.database import create_db
+    import manage
+    import pytest
+
+    await create_db()
+    with pytest.raises(SystemExit) as exc_info:
+        await manage.cmd_reset_password("no-such-user@example.com", "newpassword1")
+    assert exc_info.value.code == 1
+
+
+async def test_reset_password_short_password():
+    import auth.users  # noqa: F401
+    from db.database import create_db
+    import manage
+    import pytest
+
+    await create_db()
+    await manage.cmd_create_admin("manage-reset-short@example.com", "oldpassword1")
+    with pytest.raises(SystemExit) as exc_info:
+        await manage.cmd_reset_password("manage-reset-short@example.com", "short")
+    assert exc_info.value.code == 1

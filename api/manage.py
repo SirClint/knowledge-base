@@ -160,6 +160,11 @@ def main() -> None:
     p_import = sub.add_parser("import-users", help="Import users from JSON (skips existing)")
     p_import.add_argument("--input", default="/data/manage/users.json")
 
+    p_reset = sub.add_parser("reset-password", help="Reset a user's password (prompts interactively)")
+    p_reset.add_argument("--email", required=True, help="Email address of the user to update")
+    p_reset.add_argument("--role", choices=["reader", "editor", "admin"], default=None,
+                         help="Optionally change the user's role")
+
     args = parser.parse_args()
 
     if args.command == "create-admin":
@@ -168,6 +173,13 @@ def main() -> None:
         asyncio.run(cmd_export_users(args.output))
     elif args.command == "import-users":
         asyncio.run(cmd_import_users(args.input))
+    elif args.command == "reset-password":
+        password = getpass.getpass("New password: ")
+        confirm = getpass.getpass("Confirm password: ")
+        if password != confirm:
+            print("Passwords do not match")
+            sys.exit(1)
+        asyncio.run(cmd_reset_password(args.email, password, args.role))
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@
 
 TEST_COMPOSE = docker compose -f docker-compose.test.yml --env-file .env.test
 
-.PHONY: build build-ui build-api rebuild up down pytest e2e logs-api create-admin export-users import-users
+.PHONY: build build-ui build-api rebuild up down pytest e2e logs-api create-admin export-users import-users reset-password
 
 build:
 	$(TEST_COMPOSE) build
@@ -44,6 +44,9 @@ export-users:
 
 import-users:
 	$(TEST_COMPOSE) exec api python manage.py import-users --input /data/manage/users.json
+
+reset-password:
+	$(TEST_COMPOSE) exec -it api python manage.py reset-password $(ARGS)
 
 # ── Production guard ──────────────────────────────────────────────────────────
 # Any `make prod-*` target fails with an explicit error.
